@@ -18,7 +18,7 @@ from io import open
 import itertools
 import math
 
-
+MAX_LENGTH = 10
 USE_CUDA = torch.cuda.is_available()
 device = torch.device("cuda" if USE_CUDA else "cpu")
 
@@ -55,6 +55,7 @@ class Encoder(nn.Module):
                           dropout=(0 if n_layers==1 else dropout),
                           bidirectional=True)
         
+
     def forward(self, input_seq, input_lengths, hidden=None):
         # Convert indices to word embeddings
         embedded = self.embedding(input_seq)
@@ -93,13 +94,16 @@ class GlobalAttn(nn.Module):
     def dot_score(self, hidden, encoder_output):
         return torch.sum(hidden * encoder_output, dim=2)
 
+
     def general_score(self, hidden, encoder_output):
         energy = self.attn(encoder_output)
         return torch.sum(hidden * energy, dim=2)
 
+
     def concat_score(self, hidden, encoder_output):
         energy = self.attn(torch.cat((hidden.expand(encoder_output.size(0), -1, -1), encoder_output), 2)).tanh()
         return torch.sum(self.v * energy, dim=2)
+
 
     def forward(self, hidden, encoder_outputs):
         # Calculate Attention weights based off method
@@ -282,7 +286,259 @@ def train(input_variable, lengths, target_variable, mask, max_target_len,
     return sum(print_losses) / n_totals
 
 
+def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer,
+                   embedding, encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size,
+                   print_every, save_every, clip, corpus_name, loadFilename):
+    """
+    Trains the model for n_iterations. Saving the model involves saving a tarball containing the 
+    encoder and decoder state_dicts (parameters), optimizers' state_dicts, loss, iteration, etc. 
+    Provides flexibility with checkpoint. After laoding a checkpoint, we can use the model parameters
+    to run inference, or we can continue to train where we left off.
+    """
+    # Load batches for each iteration
+    training_batches = [batch2TrainData(voc, [random.choice(pairs) for _ in range(batch_size)]) for _ in range(n_iteration)]
+
+    # Initializations
+    print("Initializing...")
+    start_iteration = 1
+    print_loss = 0
+    if loadFileName:
+        start_iteration = checkpoint["iteration"] + 1
+    
+    # Training loop
+    print("Training...")
+    for iteration in range(start_iteration, n_iteration+1):
+        training_batch = training_batch[iteration-1]
+
+        # Extract fields from batches
+        input_variable, lengths, target_variable, mask, max_target_len = training_batch
+
+        # Run a training iteration with batch
+        loss = train(input_variable, lengths, target_variable, mask, max_target_len, 
+                        encoder, decoder, embedding, encoder_optimizer, decoder_optimizer, batch_size, clip)
+        print_loss += loss
+
+        # Print progress
+        if iteration % print_every == 0:
+            print_loss_avg = print_loss / print_every
+            print("Iteration: {}; "
+                    "Percent complete: {:.1f}%; "
+                    "Average loss: {:.4f}".format(iteration, iteration / n_iteration * 100, print_loss_avg))
+            print_loss = 0
+
+        # Save checkpoint
+        if (iteration % save_every==0):
+            directory = os.path.join(save_dir, model_name, corpus_name, "{}-{}_{}".format(encoder_n_layers, decoder_n_layers, hidden_size))
+            if not os.path.exists(directory):
+                os.makedires(directory)
+            torch.save({
+                "iteration": iteration,
+                "en": encoder.state_dict(),
+                "de": decoder.state_dict(),
+                "en_opt": encoder_optimizer.state_dict(),
+                "de_opt": decoder_optimizer.state_dict(),
+                "loss": loss,
+                "voc_dict": voc.__dict__,
+                "embedding": embedding.state_dict()
+            }, os.path.join(directory, "{}_{}.tar".format(iteration, "checkpoint")))
+
+
+# greedy decoding implementation; replace with beam search later
+class GreedySearchDecoder(nn.Module):
+    def __init__(self, encoder, decoder):
+        super(GreedySearchDecoder, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, input_seq, input_length, max_length):
+        # Forward pass through encoder
+        encoder_ouputs, encoder_hidden = self.encoder(input_seq, input_length)
+
+        # Prepare encoder's final hidden layer to be first hidden layer to the decoder
+        decoder_hidden = encoder_hidden[:decoder.n_layers]
+
+        # Initialize decoder with SOS token
+        decoder_input = torch.ones(1, 1, device=device, dtype=torch.long) * SOS_token
+
+        # Initialized tensors to append decoded words to
+        all_tokens = torch.zeros([0], device=device, dtype=torch.long)
+        all_scores = torch.zeros([0], device=device)
+
+        # Iteratively decode one wor token at a time
+        for _ in range(max_length):
+            # Forward pass through decoder
+            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
+
+            # Obtain most likely word token and its softmax score
+            decoder_scores, decoder_input = torch.max(decoder_output, dim=1)
+
+            # Record token and score
+            all_tokens = torch.cat((all_tokens, decoder_input), dim=0)
+            all_scores = torch.cat((all_scores, decoder_scores), dim=0)
+
+            # Prepare current token to be next decoder input (add a dimension)
+            decoder_input = torch.unsqueeze(decoder_input, 0)
+
+        # Return collections of word tokens and scores
+        return all_tokens, all_scores
+
+
+# Beam search implementation; todo
+class BeamSearchDecoder(nn.Module):
+    def __init__(self, encoder, decoder):
+        super(BeamSearchDecoder, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+
+def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
+    # Format input sentence as a batch
+    # words -> indexes
+    indexes_batch = [indexesFromSentence(voc, sentence)]
+
+    # Create lengths tensor
+    lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
+
+    # Transpose dimensions of batch to match models' expectations
+    input_batch = torch.LongTensor(indexes_batch).transpose(0,1)
+    
+    # Use appropriate device
+    input_batch = input_batch.to(device)
+    lengths = lengths.to("cpu")
+
+    # Decoder senetence with searcher
+    tokens, scores = searcher(input_batch, lengths, max_length)
+
+    # Indexes -> words
+    decoded_words = [voc.index2word[token.item()] for token in tokens]
+    return decoded_words
+
+
+# TODO: Change to generator later???
+def evaluateInput(encoder, decoder, searcher, voc):
+    input_sentence = ""
+    while(True):
+        try:
+            # Get input sentence
+            input_sentence = input("> ")
+
+            # Check if it is quit case
+            if input_sentence == "q" or input_sentence == "quit":
+                break
+
+            # Normalize sentence
+            input_sentence = normalizeString(input_sentence)
+
+            # Evaluate sentence
+            output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
+
+            # Format and print reponse
+            output_words[:] = [x for x in output_words if not (x == "EOS" or x == "PAD")]
+            print("Bot:", " ".join(output_words))
+        
+        except KeyError():
+            print("Error: Encountered unknown word")
+
+
 if __name__ == "__main__":
     # TODO: data preprocessing
     # TODO: train and save model either with pickle or json
     # TODO: implement beam search for decoder output
+    # Configure models
+    model_name = "generative_model"
+    attn_model = "dot"
+    hidden_size = 500
+    encoder_n_layers = 2
+    decoder_n_layers = 2
+    dropout = 0.1
+    batch_size = 64
+
+    # Set checkpoint to load; None if training for first time
+    loadFileName = None
+    checkpoint_iter = 4000
+    #loadFilename = os.path.join(save_dir, model_name, corpus_name,
+    #                            '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
+    #                            '{}_checkpoint.tar'.format(checkpoint_iter))
+
+    # Load model if a loadFilename is provided
+    if loadFileName:
+        # If loading on same machine model was trained on
+        checkpoint = torch.laod(loadFileName)
+        # If loading model to CPU
+        # checkpoint = torch.load(loadFileName, map_location=torch.device("cpu"))
+        encoder_sd = checkpoint["en"]
+        decoder_sd = checkpoint["de"]
+        encoder_optimizer_sd = checkpoint["en_opt"]
+        decoder_optimizer_sd = checkpoint["de_opt"]
+        embeddig_sd = checkpoint["embedding"]
+        voc.__dict__ = checkpoint["voc_dict"]
+
+    print("Building encoder and decoder...")
+    # Initialzie word embeddings
+    embedding = nn.Embedding(voc.num_words, hidden_size)
+    if loadFileName:
+        embedding.load_state_dict(embedding_sd)
+    
+    # Initialize encoder and decoder models
+    encoder = Encoder(hidden_size, embedding, encoder_n_layers, dropout)
+    decoder = Decoder(attn_model, embedding, hidden_size, voc.num_words, decoder_n_layers, dropout)
+    if loadFileName:
+        encoder.load_state_dict(encoder_sd)
+        decoder.load_state_dict(decoder_sd)
+    
+    # Use appropriate device
+    encoder = encoder.to(device)
+    decoder = decoder.to(device)
+    print("Models built and ready to train")
+
+    # Configure training/optimization
+    clip = 50.0
+    teacher_forcing_ratio = 1.0
+    learning_rate = 0.0001
+    decoder_learning_ratio = 5.0
+    n_iteration = 4000
+    print_every = 1
+    save_every = 500
+
+    # Ensure dropout layers are in train mode
+    encoder.train()
+    decoder.train()
+
+    # Initialize optimizers
+    print("Building optimizers...")
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+
+    if loadFileName:
+        encoder_optimizer.load_state_dict(encoder_optimizer_sd)
+        decoder_optimizer.load_state_dict(decoder_optimizer_sd)
+
+    # If CUDA available
+    for state in encoder_optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.cuda()
+
+    for state in decoder_optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.cuda()
+
+    # Train
+    print("Training...")
+    trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding,
+               encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, 
+               clip, corpus_name, loadFilename)
+    print("Training Completed")
+
+    # Evaluation
+    # Set dropout layers to eval mode
+    encoder.eval()
+    decoder.eval()
+
+    # Initialize search module
+    searcher = GreedySearchDecoder(encoder, decoder)
+    #searcher = BeamSearchDecoder(encoder, decoder)
+
+    # Begin chat (uncomment)
+    # evaluateInput(encoder, decoder, searcher, voc)

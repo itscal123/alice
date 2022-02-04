@@ -18,7 +18,11 @@ from io import open
 import itertools
 import math
 
+MIN_COUNT = 3
 MAX_LENGTH = 10
+PAD_token = 0
+SOS_token = 1
+EOS_token = 2
 USE_CUDA = torch.cuda.is_available()
 device = torch.device("cuda" if USE_CUDA else "cpu")
 
@@ -441,9 +445,6 @@ def evaluateInput(encoder, decoder, searcher, voc):
 
 
 if __name__ == "__main__":
-    # TODO: data preprocessing
-    # TODO: train and save model either with pickle or json
-    # TODO: implement beam search for decoder output
     # Configure models
     model_name = "generative_model"
     attn_model = "dot"

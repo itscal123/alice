@@ -17,6 +17,8 @@ import codecs
 from io import open
 import itertools
 import math
+import pickle
+from data import Voc, batch2TrainData, Data
 
 MIN_COUNT = 3
 MAX_LENGTH = 10
@@ -28,31 +30,24 @@ device = torch.device("cuda" if USE_CUDA else "cpu")
 
 class Encoder(nn.Module):
     """
-    Bidirectional GRU encoder for the general chatbot trained on the PolyAI
-    reddit data.
+    Bidirectional GRU encoder for the general chatbot trained on the PolyAI reddit data.
     params: 
         input_seq: batch of input sentences; shape = (max_length, batch_size)
-        
         input_lengths: list of sentence lengths corresponding to each sentence in the batch; shape = (batch_size)
-        
         hidden: hidden state; shape (n_layers * num_directions, batch_size, hidden_size)
 
     returns:
         outputs: output features from last hidden layer of the GRU (sum of bidirectional outputs); shape = (max_len, batch_size, hidden_size)
-        
         hidden: updated hidden state from GRU; shape = (n_layers * num_directions, batch_size, hidden_size)
     """
     def __init__(self, hidden_size, embedding, n_layers=1, dropout=0):
         super(Encoder, self).__init__()
-        self.n_layers
-        self.hidden_size
-        self.embedding
+        self.n_layers = n_layers
+        self.hidden_size = hidden_size
+        self.embedding = embedding
         # Initialize GRU. input_size and hidden_size params are set to hidden_size
         # because input_size is a word embedding with number of features
         # equal to the hidden_size
-
-        # TODO: additional GRU hidden layers???
-        
         self.gru = nn.GRU(hidden_size,
                           hidden_size, 
                           n_layers, 
@@ -64,11 +59,11 @@ class Encoder(nn.Module):
         # Convert indices to word embeddings
         embedded = self.embedding(input_seq)
         # Pack padded sequences
-        packed = nn.utils.pack_padded_sequence(embedded, input_lengths)
+        packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
         # Forward pass
         outputs, hidden = self.gru(packed, hidden)
         # Unpack padding
-        outputs, _ = nn.utils.pad_packed_sequence(outputs)
+        outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
         # Sum bidirectional GRUs (left-to-right and right-to-left)
         outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]
         # Returns output and final hidden state
@@ -77,10 +72,9 @@ class Encoder(nn.Module):
 
 class GlobalAttn(nn.Module):
     """
-    Implementation of Luong's Global Attention mechanism which calculates the 
-    the attention energies bewteen the encoder output and decoder output
-    which are known as score functions.
-    Outputs a softmax normalized weights tensor of shape (batch_size, 1, max_length)
+    Implementation of Luong's Global Attention mechanism which calculates the attention energies bewteen the encoder
+    output and decoder output which are known as score functions. Outputs a softmax normalized weights tensor of shape 
+    (batch_size, 1, max_length)
     """
     def __init__(self, method, hidden_size):
         super(GlobalAttn, self).__init__()
@@ -127,20 +121,16 @@ class GlobalAttn(nn.Module):
 
 class Decoder(nn.Module):
     """
-    Unidirectional GRU model decoder for the general chatbot trained with Global 
-    Attention. Manually feed each batch one time step (i.e., one word) at a time.
-    Consequently, the embedded word tensor and GRU output both have shape (1, batch_size, hidden_size)
+    Unidirectional GRU model decoder for the general chatbot trained with Global Attention. Manually feed each batch one
+    time step (i.e., one word) at a time. Consequently, the embedded word tensor and GRU output both have shape 
+    (1, batch_size, hidden_size)
     params:
         input_step: one time step (one word) of input sequence batch; shape = (1, batch_size)
-
         last_hidden: final hidden layer of GRU; shape = (n_layers * num_directions, batch_size, hidden_size)
-
         encoder_outputs: encoder's outputs; shape (n_layers * num_directions, batch_size, hidden_size)
-
     returns:
         output: softmax normalized tensor giving probabilities of each word being the correct next word in the decoded sequence;
                 shape = (batch_size, voc.num_words)
-
         hidden: final hidden state of GRU; shape = (n_layers * num_directions, batch_size, hidden_size)
     """
     def __init__(self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1):
@@ -193,10 +183,9 @@ class Decoder(nn.Module):
 
 def maskNLL(inp, target, mask):
     """
-    Custom loss function for model training. Since the inputs are batches of padded
-    sequences, we cannot consider all elements in the input tensor. Instead, calculate
-    loss by decoder's output tensor, target tensor, and a binary mask tensor that describes
-    the padded target tensor. Negative log likelihood of the elements that are are masked
+    Custom loss function for model training. Since the inputs are batches of padded sequences, we cannot consider all 
+    elements in the input tensor. Instead, calculate loss by decoder's output tensor, target tensor, and a binary mask 
+    tensor that describes the padded target tensor. Negative log likelihood of the elements that are are masked
     (i.e., marked 1 in the mask tensor).
     """
     nTotal = mask.sum()
@@ -210,13 +199,11 @@ def train(input_variable, lengths, target_variable, mask, max_target_len,
           encoder, decoder, embedding, encoder_optimizer, decoder_optimizer, 
           batch_size, clip, max_length=MAX_LENGTH):
     """
-    Custom training function for a single training iteration on a batch of inputs. 
-    Incorporates both gradient clipping and teacher forcing. Gradient clipping is a 
-    technique to deal with the vanishing/exploding gradient problem that can arise 
-    in neural network training (especially in the RNN framework). Teacher forcing
-    is another technique especially helpful in difficult learning tasks like NLP which promote
-    faster convergence during training by allowing the decoder to occassionaly access 
-    the target word as part of its next word prediction
+    Custom training function for a single training iteration on a batch of inputs. Incorporates both gradient clipping 
+    and teacher forcing. Gradient clipping is a technique to deal with the vanishing/exploding gradient problem that can
+    arise in neural network training (especially in the RNN framework). Teacher forcing is another technique especially 
+    helpful in difficult learning tasks like NLP which promote faster convergence during training by allowing the decoder 
+    to occassionaly access the target word as part of its next word prediction
     """
     # Zero gradients
     encoder_optimizer.zero_grad()
@@ -246,7 +233,7 @@ def train(input_variable, lengths, target_variable, mask, max_target_len,
     decoder_hidden = encoder_hidden[:decoder.n_layers]
 
     # Check if we are using Teacher Forcing on this iteration
-    use_teacher_forcing = True if random.random < teacher_forcing_ratio else False
+    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
     # Forward pass through decoder one time step at a time 
     if use_teacher_forcing:
@@ -312,7 +299,7 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
     # Training loop
     print("Training...")
     for iteration in range(start_iteration, n_iteration+1):
-        training_batch = training_batch[iteration-1]
+        training_batch = training_batches[iteration-1]
 
         # Extract fields from batches
         input_variable, lengths, target_variable, mask, max_target_len = training_batch
@@ -330,6 +317,7 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
                     "Average loss: {:.4f}".format(iteration, iteration / n_iteration * 100, print_loss_avg))
             print_loss = 0
 
+        """
         # Save checkpoint
         if (iteration % save_every==0):
             directory = os.path.join(save_dir, model_name, corpus_name, "{}-{}_{}".format(encoder_n_layers, decoder_n_layers, hidden_size))
@@ -345,7 +333,7 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
                 "voc_dict": voc.__dict__,
                 "embedding": embedding.state_dict()
             }, os.path.join(directory, "{}_{}.tar".format(iteration, "checkpoint")))
-
+        """
 
 # greedy decoding implementation; replace with beam search later
 class GreedySearchDecoder(nn.Module):
@@ -356,10 +344,10 @@ class GreedySearchDecoder(nn.Module):
 
     def forward(self, input_seq, input_length, max_length):
         # Forward pass through encoder
-        encoder_ouputs, encoder_hidden = self.encoder(input_seq, input_length)
+        encoder_outputs, encoder_hidden = self.encoder(input_seq, input_length)
 
         # Prepare encoder's final hidden layer to be first hidden layer to the decoder
-        decoder_hidden = encoder_hidden[:decoder.n_layers]
+        decoder_hidden = encoder_hidden[:self.decoder.n_layers]
 
         # Initialize decoder with SOS token
         decoder_input = torch.ones(1, 1, device=device, dtype=torch.long) * SOS_token
@@ -389,74 +377,47 @@ class GreedySearchDecoder(nn.Module):
 
 # Beam search implementation; todo
 class BeamSearchDecoder(nn.Module):
-    def __init__(self, encoder, decoder):
+    def __init__(self, encoder, decoder, k=2):
         super(BeamSearchDecoder, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
+        self.k = k
 
+    def forward(self, input_seq, input_length, max_length):
+        # Forward pass through encoder
+        encoder_outputs, encoder_hidden = self.encoder(input_seq, input_length)
 
-def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
-    # Format input sentence as a batch
-    # words -> indexes
-    indexes_batch = [indexesFromSentence(voc, sentence)]
+        # Prepare encoder's final hidden layer to be first hidden layer to the decoder
+        decoder_hidden = encoder_hidden[:self.decoder.n_layers]
 
-    # Create lengths tensor
-    lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
+        # Initialize decoder with SOS token
+        decoder_input = torch.ones(1, 1, device=device, dtype=torch.long) * SOS_token
 
-    # Transpose dimensions of batch to match models' expectations
-    input_batch = torch.LongTensor(indexes_batch).transpose(0,1)
-    
-    # Use appropriate device
-    input_batch = input_batch.to(device)
-    lengths = lengths.to("cpu")
-
-    # Decoder senetence with searcher
-    tokens, scores = searcher(input_batch, lengths, max_length)
-
-    # Indexes -> words
-    decoded_words = [voc.index2word[token.item()] for token in tokens]
-    return decoded_words
-
-
-# TODO: Change to generator later???
-def evaluateInput(encoder, decoder, searcher, voc):
-    input_sentence = ""
-    while(True):
-        try:
-            # Get input sentence
-            input_sentence = input("> ")
-
-            # Check if it is quit case
-            if input_sentence == "q" or input_sentence == "quit":
-                break
-
-            # Normalize sentence
-            input_sentence = normalizeString(input_sentence)
-
-            # Evaluate sentence
-            output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
-
-            # Format and print reponse
-            output_words[:] = [x for x in output_words if not (x == "EOS" or x == "PAD")]
-            print("Bot:", " ".join(output_words))
-        
-        except KeyError():
-            print("Error: Encountered unknown word")
+class BeamNode():
+    def __init__(self, hidden_state, prev, logProb, length, WORDID):
+        self.hidden_state = hidden_state
+        self.prev = prev
+        self.logProb = logProb
+        self.length = length
 
 
 if __name__ == "__main__":
     # Configure models
     model_name = "generative_model"
     attn_model = "dot"
-    hidden_size = 500
-    encoder_n_layers = 2
-    decoder_n_layers = 2
+    hidden_size = 800
+    encoder_n_layers = 3
+    decoder_n_layers = 3
     dropout = 0.1
     batch_size = 64
 
+    # Load Data components
+    data = pickle.load(open("generative\data.p", "rb"))
+    voc, pairs, save_dir, corpus_name = data.loadData()
+
     # Set checkpoint to load; None if training for first time
     loadFileName = None
-    checkpoint_iter = 4000
+    checkpoint_iter = 100
     #loadFilename = os.path.join(save_dir, model_name, corpus_name,
     #                            '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
     #                            '{}_checkpoint.tar'.format(checkpoint_iter))
@@ -464,7 +425,7 @@ if __name__ == "__main__":
     # Load model if a loadFilename is provided
     if loadFileName:
         # If loading on same machine model was trained on
-        checkpoint = torch.laod(loadFileName)
+        checkpoint = torch.load(loadFileName)
         # If loading model to CPU
         # checkpoint = torch.load(loadFileName, map_location=torch.device("cpu"))
         encoder_sd = checkpoint["en"]
@@ -475,7 +436,7 @@ if __name__ == "__main__":
         voc.__dict__ = checkpoint["voc_dict"]
 
     print("Building encoder and decoder...")
-    # Initialzie word embeddings
+    # Initialize word embeddings
     embedding = nn.Embedding(voc.num_words, hidden_size)
     if loadFileName:
         embedding.load_state_dict(embedding_sd)
@@ -497,7 +458,7 @@ if __name__ == "__main__":
     teacher_forcing_ratio = 1.0
     learning_rate = 0.0001
     decoder_learning_ratio = 5.0
-    n_iteration = 4000
+    n_iteration = 5000
     print_every = 1
     save_every = 500
 
@@ -529,7 +490,7 @@ if __name__ == "__main__":
     print("Training...")
     trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, decoder_optimizer, embedding,
                encoder_n_layers, decoder_n_layers, save_dir, n_iteration, batch_size, print_every, save_every, 
-               clip, corpus_name, loadFilename)
+               clip, corpus_name, loadFileName)
     print("Training Completed")
 
     # Evaluation
@@ -537,9 +498,13 @@ if __name__ == "__main__":
     encoder.eval()
     decoder.eval()
 
-    # Initialize search module
+    # Initialize search 
     searcher = GreedySearchDecoder(encoder, decoder)
     #searcher = BeamSearchDecoder(encoder, decoder)
 
-    # Begin chat (uncomment)
-    # evaluateInput(encoder, decoder, searcher, voc)
+    # Save the encoder, decoder, and search method
+    print("Saving model components")
+    torch.save(encoder, "generative\models\encoder.pt")
+    torch.save(decoder, "generative\models\decoder.pt")
+    torch.save(searcher, "generative\models\searcher.pt")
+    print("Done")

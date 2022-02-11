@@ -1,5 +1,7 @@
 import torch
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, BertModel, AdamW, BertConfig
+from tqdm import tqdm
+from torch.utils.data import TensorDataset, DataLoader, RandomSampler
 # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
 import logging
 #logging.basicConfig(level=logging.INFO)
@@ -11,6 +13,65 @@ tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained('bert-base-uncased',
                                   output_hidden_states = True, # Whether the model returns all hidden-states.
                                   )
+
+#### Pre-processing data ####
+# based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
+
+# load dataset into a dataframe
+# using just cornell set for simplicity -- will add the rest later
+file = '/Users/bianca/Documents/SCHOOL/CS175/alice/data/cornell movie-dialogs corpus/movie_lines.txt'
+
+df = pd.read_csv(file, index_col=False,
+                 sep=r'\+{3}\$\+{3}',
+                 engine='python',
+                 header=None,
+                 skipinitialspace=True,
+                 encoding='unicode_escape',
+                 na_filter=False,
+                 names=['lineID', 'charID', 'movieID', 'charName', 'text'])
+
+print('Num sentences: {:,}\n'.format(df.shape[0]))
+#print(df.sample(10))
+
+lines = df.text.values
+#print('First 5 lines: {}'.format(lines[:5]))
+
+max_length = 512
+input_ids = []              # id mappings
+attention_masks = []
+
+for line in lines:
+    encoded_dict = tokenizer.encode_plus(line,
+                                         add_special_tokens=True,
+                                         max_length=max_length,
+                                         padding='max_length',
+                                         truncation=True,
+                                         return_attention_mask=True,
+                                         return_tensors='pt')
+    input_ids.append(encoded_dict['input_ids'])
+    attention_masks.append(encoded_dict['attention_mask'])
+
+# Convert the lists into tensors.
+input_ids = torch.cat(input_ids, dim=0)
+attention_masks = torch.cat(attention_masks, dim=0)
+
+# create dataset for our data loader
+dataset = TensorDataset(input_ids, attention_masks)
+
+# create data loader to make train loop simpler & more efficient
+batch_size = 16
+loader = DataLoader(dataset, RandomSampler, batch_size=batch_size)
+
+#### Training ####
+epochs = 3
+lr = 2e-5
+
+optimizer = AdamW(model.parameters(),
+                  lr=lr,
+                  eps=1e-8)
+
+model.train()           # put model in a training state
+
 
 
 # Do we need this? 

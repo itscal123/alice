@@ -13,23 +13,10 @@ model = BertModel.from_pretrained('bert-base-uncased',
                                   )
 
 
-# Do we need this? 
-'''
-# If there's a GPU available...
-if torch.cuda.is_available():
 
-    # Tell PyTorch to use the GPU.
-    device = torch.device("cuda")
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    print('There are %d GPU(s) available.' % torch.cuda.device_count())
-
-    print('We will use the GPU:', torch.cuda.get_device_name(0))
-
-# If not...
-else:
-    print('No GPU available, using the CPU instead.')
-    device = torch.device("cpu")
-'''
+model.to(device)
 
 
 '''

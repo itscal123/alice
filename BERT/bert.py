@@ -14,6 +14,9 @@ model = BertModel.from_pretrained('bert-base-uncased',
                                   output_hidden_states = True, # Whether the model returns all hidden-states.
                                   )
 
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+model.to(device)
+
 #### Pre-processing data ####
 # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
 
@@ -72,13 +75,28 @@ optimizer = AdamW(model.parameters(),
 
 model.train()           # put model in a training state
 
-
-
-
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-model.to(device)
-
+# loop from here: https://towardsdatascience.com/how-to-train-bert-aaad00533168
+for epoch in range(epochs):
+    loop = tqdm(loader, leave=True)
+    for batch in loop:
+        # initialize calculated gradients (from prev step)
+        optimizer.zero_grad()
+        # pull all tensor batches required for training
+        input_ids = batch['input_ids'].to(device)
+        token_type_ids = batch['token_type_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        # process
+        outputs = model(input_ids, attention_mask=attention_mask,
+                        token_type_ids=token_type_ids)
+        # extract loss
+        loss = outputs.loss
+        # calculate loss for every parameter that needs grad update
+        loss.backward()
+        # update parameters
+        optimizer.step()
+        # print relevant info to progress bar
+        loop.set_description(f'Epoch {epoch}')
+        loop.set_postfix(loss=loss.item())
 
 '''
 This is basically just the code from https://mccormickml.com/2019/05/14/BERT-word-embeddings-tutorial/

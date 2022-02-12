@@ -1,5 +1,6 @@
 import pandas as pd
 import torch
+import os
 from transformers import BertTokenizer
 
 # load dataset into a dataframe
@@ -27,6 +28,28 @@ from transformers import BertTokenizer
 # print('Original: ', lines[9])
 # print('Tokenized: ', tokenizer.tokenize(lines[9]))
 # print('Token IDs: ', tokenizer.convert_tokens_to_ids(tokenizer.tokenize(lines[9])))
+
+ROOT_DIR = os.path.dirname(os.path.abspath(os.curdir))
+
+gen_sarc_file = 'data/sarcasm_v2/GEN-sarc-notsarc.csv'
+hyperbole_file = 'data/sarcasm_v2/HYP-sarc-notsarc.csv'
+rq_file = 'data/sarcasm_v2/RQ-sarc-notsarc.csv'
+
+
+def convert_sarc_data_to_dataframe(paths: [str]):
+    """ Reads sarc datasets into csv file """
+    dfs = []
+    for path in paths:
+        file = os.path.join(ROOT_DIR, path)
+        df = pd.read_csv(file, index_col='id')
+        print('Num sentences in {}: {:,}\n'.format(path, df.shape[0]))
+        print('Samples:\n {}\n'.format(df.sample(3)))
+        dfs.append(df)
+    return dfs
+
+
+gen_df, hyp_df, rq_df = convert_sarc_data_to_dataframe([gen_sarc_file, hyperbole_file, rq_file])
+
 
 ### from https://github.com/Nielspace/BERT/blob/master/BERT%20Text%20Classification%20fine-tuning.ipynb
 # with modifications for just word embeddings
@@ -68,7 +91,7 @@ class DATALoader:
         }
 ### END
 
-#some text has len > ~670, we'll truncate those
+# some text has len > ~670, we'll truncate those
 # loaded_data = DATALoader(lines, 150)
 # # look at 10th input
 # sample = loaded_data[9]

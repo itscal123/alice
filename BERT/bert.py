@@ -1,17 +1,17 @@
 import torch
+import pandas as pd
 from transformers import BertTokenizer, BertModel, AdamW, BertConfig
 from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler
 # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
 import logging
-#logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 import matplotlib.pyplot as plt
-
 
 # The following initializations are just so I could test out my embed_message function.
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained('bert-base-uncased',
-                                  output_hidden_states = True, # Whether the model returns all hidden-states.
+                                  output_hidden_states=True,  # Whether the model returns all hidden-states.
                                   )
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -34,14 +34,15 @@ df = pd.read_csv(file, index_col=False,
                  names=['lineID', 'charID', 'movieID', 'charName', 'text'])
 
 print('Num sentences: {:,}\n'.format(df.shape[0]))
-#print(df.sample(10))
+print(df.sample(10))
 
 lines = df.text.values
-#print('First 5 lines: {}'.format(lines[:5]))
+# print('First 5 lines: {}'.format(lines[:5]))
 
 max_length = 512
-input_ids = []              # id mappings
-attention_masks = []
+input_ids = []          # id mappings
+attention_masks = []    # padding differentiators
+token_type_ids = []     # segment ids
 
 for line in lines:
     encoded_dict = tokenizer.encode_plus(line,
@@ -53,19 +54,24 @@ for line in lines:
                                          return_tensors='pt')
     input_ids.append(encoded_dict['input_ids'])
     attention_masks.append(encoded_dict['attention_mask'])
+    token_type_ids.append(encoded_dict['token_type_ids'])
 
 # Convert the lists into tensors.
 input_ids = torch.cat(input_ids, dim=0)
 attention_masks = torch.cat(attention_masks, dim=0)
+token_type_ids = torch.cat(token_type_ids, dim=0)
 
 # create dataset for our data loader
-dataset = TensorDataset(input_ids, attention_masks)
+dataset = TensorDataset(input_ids, token_type_ids, attention_masks)
 
 # create data loader to make train loop simpler & more efficient
 batch_size = 16
-loader = DataLoader(dataset, RandomSampler, batch_size=batch_size)
+loader = DataLoader(dataset,
+                    sampler=RandomSampler(dataset),
+                    batch_size=batch_size)
 
 #### Training ####
+
 epochs = 3
 lr = 2e-5
 
@@ -73,18 +79,17 @@ optimizer = AdamW(model.parameters(),
                   lr=lr,
                   eps=1e-8)
 
-model.train()           # put model in a training state
-
 # loop from here: https://towardsdatascience.com/how-to-train-bert-aaad00533168
 for epoch in range(epochs):
-    loop = tqdm(loader, leave=True)
+    loop = tqdm(loader)
+    model.train()  # put model in a training state
     for batch in loop:
         # initialize calculated gradients (from prev step)
         optimizer.zero_grad()
         # pull all tensor batches required for training
-        input_ids = batch['input_ids'].to(device)
-        token_type_ids = batch['token_type_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
+        input_ids = batch[0].to(device)
+        token_type_ids = batch[1].to(device)
+        attention_mask = batch[2].to(device)
         # process
         outputs = model(input_ids, attention_mask=attention_mask,
                         token_type_ids=token_type_ids)
@@ -112,9 +117,9 @@ We're going to run dot-product or cosine-similarity on the embedding of the user
 and the embedding of every sentence in our corpus/database/dataset/data(...?)
 '''
 
+
 # NOTE: I think this function can be modified to get embeddings for every sentence in a corpus... Pretty easily too...
 def embed_message(message, tokenizer, model):
-
     # Add required start and end tokens
     marked_text = "[CLS] " + message + " [SEP]"
 
@@ -122,7 +127,7 @@ def embed_message(message, tokenizer, model):
     tokenized_text = tokenizer.tokenize(marked_text)
 
     # Print out the tokens.
-    #print (tokenized_text)
+    # print (tokenized_text)
 
     # Map the token strings to their vocabulary indeces.
     indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
@@ -135,7 +140,7 @@ def embed_message(message, tokenizer, model):
     # and all tokens of the second sentence a 1.
     segments_ids = [1] * len(tokenized_text)
 
-    #print (segments_ids)
+    # print (segments_ids)
 
     # Convert inputs to PyTorch tensors
     tokens_tensor = torch.tensor([indexed_tokens])
@@ -164,7 +169,7 @@ def embed_message(message, tokenizer, model):
     token_embeddings = torch.squeeze(token_embeddings, dim=1)
 
     # Swap dimensions 0 and 1.
-    token_embeddings = token_embeddings.permute(1,0,2)
+    token_embeddings = token_embeddings.permute(1, 0, 2)
 
     # `token_vecs` is a tensor with shape [22 x 768]
     token_vecs = hidden_states[-2][0]
@@ -172,9 +177,10 @@ def embed_message(message, tokenizer, model):
     # Calculate the average of all token vectors.
     sentence_embedding = torch.mean(token_vecs, dim=0)
 
-    #print ("Our final sentence embedding vector of shape:", sentence_embedding.size())
-    
+    # print ("Our final sentence embedding vector of shape:", sentence_embedding.size())
+
     return sentence_embedding
+
 
 # This is me testing the output of my function. Pretty sure it works.
 print(embed_message("hello?", tokenizer, model))

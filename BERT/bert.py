@@ -8,6 +8,9 @@ from torch.optim import AdamW
 import logging
 # logging.basicConfig(level=logging.INFO)
 import matplotlib.pyplot as plt
+import numpy as np
+
+from data import convert_sarc_data_to_dataframe
 
 print("## Loading Tokenizer and Pretrained Model ##")
 # The following initializations are just so I could test out my embed_message function.
@@ -23,24 +26,34 @@ model.to(device)
 # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
 
 print("## Preprocessing Data ##")
-# load dataset into a dataframe
-# using just cornell set for simplicity -- will add the rest later
-file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
+# load datasets into dataframes
+movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
+movie_dialogues_df   = pd.read_csv(movie_dialogues_file, index_col=False,
+                                   sep=r'\+{3}\$\+{3}',
+                                   engine='python',
+                                   header=None,
+                                   skipinitialspace=True,
+                                   encoding='unicode_escape',
+                                   na_filter=False,
+                                   names=['lineID', 'charID', 'movieID', 'charName', 'text'])
+# print('Num sentences: {:,}\n'.format(movie_dialogues_df.shape[0]))
+# print(movie_dialogues_df.sample(10))
 
-df = pd.read_csv(file, index_col=False,
-                 sep=r'\+{3}\$\+{3}',
-                 engine='python',
-                 header=None,
-                 skipinitialspace=True,
-                 encoding='unicode_escape',
-                 na_filter=False,
-                 names=['lineID', 'charID', 'movieID', 'charName', 'text'])
+sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
+              'data/sarcasm_v2/HYP-sarc-notsarc.csv',
+              'data/sarcasm_v2/RQ-sarc-notsarc.csv']
+sarc_dfs = convert_sarc_data_to_dataframe(sarc_files)
+# for df in sarc_dfs:
+#     print('Num sentences: {:,}\n'.format(df.shape[0]))
+#     print(df.sample(10))
 
-print('Num sentences: {:,}\n'.format(df.shape[0]))
-print(df.sample(10))
-
-lines = df.text.values
+lines = np.array([])
+for df in sarc_dfs:
+    lines = np.concatenate((lines, df.text.values), axis=None)
+lines = np.concatenate((lines, movie_dialogues_df.text.values), axis=None)
+# print(len(lines)) #309,406 lines
 # print('First 5 lines: {}'.format(lines[:5]))
+
 
 max_length = 512
 input_ids = []          # id mappings
@@ -106,6 +119,7 @@ for epoch in range(epochs):
         loop.set_description(f'Epoch {epoch}')
         loop.set_postfix(loss=loss.item())
 
+
 '''
 This is basically just the code from https://mccormickml.com/2019/05/14/BERT-word-embeddings-tutorial/
 Debugging print statements have been commented out and the "teaching/demonstration code" has been omitted.
@@ -119,12 +133,13 @@ single sentence embedding (a vector) that corresponds to the given message. I'm 
 We're going to run dot-product or cosine-similarity on the embedding of the user's message
 and the embedding of every sentence in our corpus/database/dataset/data(...?)
 '''
-
-
 # NOTE: I think this function can be modified to get embeddings for every sentence in a corpus... Pretty easily too...
-def embed_message(message, tokenizer, model):
+def embed_message(messages, tokenizer, model):
     # Add required start and end tokens
-    marked_text = "[CLS] " + message + " [SEP]"
+    # messages = np.array(messages)
+    # marker = lambda x: "[CLS] " + x + " [SEP]"
+    # messages = np.array(marker(message) for message in messages)
+    marked_text = "[CLS] " + messages + " [SEP]"
 
     # Tokenize message with the BERT tokenizer.
     tokenized_text = tokenizer.tokenize(marked_text)

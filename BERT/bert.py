@@ -3,11 +3,13 @@ import pandas as pd
 from transformers import BertTokenizer, BertModel, AdamW, BertConfig
 from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler
+from torch.optim import AdamW
 # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
 import logging
 # logging.basicConfig(level=logging.INFO)
 import matplotlib.pyplot as plt
 
+print("## Loading Tokenizer and Pretrained Model ##")
 # The following initializations are just so I could test out my embed_message function.
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained('bert-base-uncased',
@@ -20,9 +22,10 @@ model.to(device)
 #### Pre-processing data ####
 # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
 
+print("## Preprocessing Data ##")
 # load dataset into a dataframe
 # using just cornell set for simplicity -- will add the rest later
-file = '/Users/bianca/Documents/SCHOOL/CS175/alice/data/cornell movie-dialogs corpus/movie_lines.txt'
+file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
 
 df = pd.read_csv(file, index_col=False,
                  sep=r'\+{3}\$\+{3}',

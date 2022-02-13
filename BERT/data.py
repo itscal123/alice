@@ -40,8 +40,11 @@ def convert_sarc_data_to_dataframe(paths: [str]):
     """ Reads sarc datasets into csv file """
     dfs = []
     for path in paths:
-        file = os.path.join(ROOT_DIR, path)
-        df = pd.read_csv(file, index_col='id')
+        # this line didn't work for me. since we have the data in the github project dir,
+        # i think we can just reference it 'locally' -- without the root path prefix. 
+        #file = os.path.join(ROOT_DIR, path)
+        df = pd.read_csv(path, index_col='id')
+        df = df[df['class'] == 'sarc'] # only use sarcastic text
         print('Num sentences in {}: {:,}\n'.format(path, df.shape[0]))
         print('Samples:\n {}\n'.format(df.sample(3)))
         dfs.append(df)

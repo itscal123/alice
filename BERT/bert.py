@@ -25,7 +25,7 @@ model.to(device)
 #### Pre-processing data ####
 # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
 
-print("## Preprocessing Data ##")
+print("\n## Preprocessing Data ##")
 # load datasets into dataframes
 movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
 movie_dialogues_df   = pd.read_csv(movie_dialogues_file, index_col=False,
@@ -87,7 +87,7 @@ loader = DataLoader(dataset,
                     batch_size=batch_size)
 
 #### Training ####
-
+print("\n## Start Training ##")
 epochs = 3
 lr = 2e-5
 
@@ -111,6 +111,7 @@ for epoch in range(epochs):
                         token_type_ids=token_type_ids)
         # extract loss
         loss = outputs.loss
+        
         # calculate loss for every parameter that needs grad update
         loss.backward()
         # update parameters

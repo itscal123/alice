@@ -8,3 +8,6 @@
 /httpRequests/
 
 .idea
+
+# Ignore Pickle
+embeddings.pkl

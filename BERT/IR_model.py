@@ -1,221 +1,111 @@
-# code from https://github.com/Nielspace/BERT/blob/master/BERT%20Text%20Classification%20fine-tuning.ipynb
-import transformers
-from transformers import AdamW
-from transformers import get_linear_schedule_with_warmup
+'''
+This is basically just the code from https://mccormickml.com/2019/05/14/BERT-word-embeddings-tutorial/
+Debugging print statements have been commented out and the "teaching/demonstration code" has been omitted.
+I'm thinking of using this function in our "main loop," where we continually prompt the user for a chat
+message. 
 
+This function takes in a String message, a pre-trained model tokenizer, and a BERT model. It returns a 
+single sentence embedding (a vector) that corresponds to the given message. I'm pretty sure we can just 
+"Plug-and-Play" a fine-tuned BERT model into here.
 
-import torch
-import torch.nn as nn
-from tqdm import tqdm
+We're going to run dot-product or cosine-similarity on the embedding of the user's message
+and the embedding of every sentence in our corpus/database/dataset/data(...?)
+'''
 
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
+# NOTE: I think this function can be modified to get embeddings for every sentence in a corpus... Pretty easily too...
+def embed_message(messages, tokenizer, model):
+    # Add required start and end tokens
+    # messages = np.array(messages)
+    # marker = lambda x: "[CLS] " + x + " [SEP]"
+    # messages = np.array(marker(message) for message in messages)
+    # marked_text = "[CLS] " + messages + " [SEP]"
 
-import pandas as pd
+    # Tokenize message with the BERT tokenizer.
+    # tokenized_text = tokenizer.tokenize(marked_text)
 
-# commented this out, was a ipynb thing
-#!pip freeze > requirement.txt
+    # Print out the tokens.
+    # print (tokenized_text)
 
+    # Map the token strings to their vocabulary indeces.
+    # indexed_tokens = tokenizer.convert_tokens_to_ids(tokenized_text)
 
-class BERTClassification(nn.Module):
-    def __init__(self):
-        super(BERTClassification, self).__init__()
-        self.bert = transformers.BertModel.from_pretrained('bert-base-cased')
-        self.bert_drop = nn.Dropout(0.4)
-        self.out = nn.Linear(768, 1)
+    # Display the words with their indeces.
+    # for tup in zip(tokenized_text, indexed_tokens):
+    #     print('{:<12} {:>6,}'.format(tup[0], tup[1]))
 
-    def forward(self, ids, mask, token_type_ids):
-        _, pooledOut = self.bert(ids, attention_mask=mask,
-                                 token_type_ids=token_type_ids)
-        bertOut = self.bert_drop(pooledOut)
-        output = self.out(bertOut)
+    # Create segment IDs: assign each word in the first sentence plus the ‘[SEP]’ token a 0,
+    # and all tokens of the second sentence a 1.
+    # segments_ids = [1] * len(tokenized_text)
 
-        return output
+    # print (segments_ids)
 
+    # this is how long our encoded vectors will be, 512 is standard, but technically not needed for our purposes
+    # (we won't be returning responses > 512 words)
+    # so if we needed to do any speed optimization, we could play around with this value
+    max_length = 512
 
-class DATALoader:
-    def __init__(self, data, target, max_length):
-        self.data = data
-        self.target = target  # make sure to convert the target into numerical values
-        self.tokeniser = transformers.BertTokenizer.from_pretrained('bert-base-cased')
-        self.max_length = max_length
+    input_ids = []  # id mappings
+    attention_masks = []  # padding differentiators
+    token_type_ids = []  # segment ids
 
-    def __len__(self):
-        return len(self.data)
+    for msg in messages:
+        # We can use the encode_plus() function to bypass having to convert ids and segment ids manually
+        encoded_dict = tokenizer.encode_plus(msg,
+                                             add_special_tokens=True,
+                                             max_length=max_length,
+                                             padding='max_length',
+                                             truncation=True,
+                                             return_attention_mask=True,
+                                             return_tensors='pt')
+        input_ids.append(encoded_dict['input_ids'])
+        attention_masks.append(encoded_dict['attention_mask'])
+        token_type_ids.append(encoded_dict['token_type_ids'])
 
-    def __getitem__(self, item):
-        data = str(self.data[item])
-        data = " ".join(data.split())
+    # Convert the lists into tensors.
+    tokens_tensor = torch.cat(input_ids, dim=0)
+    segments_tensor = torch.cat(token_type_ids, dim=0)
 
-        inputs = self.tokeniser.encode_plus(
-            data,
-            None,
-            add_special_tokens=True,
-            max_length=self.max_length,
-            pad_to_max_length=True
-
-        )
-
-        ids = inputs["input_ids"]
-        mask = inputs['attention_mask']
-        token_type_ids = inputs["token_type_ids"]
-
-        padding_length = self.max_length - len(ids)
-        ids = ids + ([0] * padding_length)
-        mask = mask + ([0] * padding_length)
-        token_type_ids = token_type_ids + ([0] * padding_length)
-
-        return {
-            'ids': torch.tensor(ids, dtype=torch.long),
-            'mask': torch.tensor(mask, dtype=torch.long),
-            'token_type_ids': torch.tensor(token_type_ids, dtype=torch.long),
-            'targets': torch.tensor(self.target[item], dtype=torch.long)
-        }
-
-
-def loss_fn(output, targets):
-    return nn.BCEWithLogitsLoss()(output, targets.view(-1, 1))
-
-
-def train_func(data_loader, model, optimizer, device, scheduler):
-    model.to(device)
-    model.train()
-
-    for bi, d in tqdm(enumerate(data_loader), total=len(data_loader)):
-        ids = d["ids"]
-        token_type_ids = d["token_type_ids"]
-        mask = d["mask"]
-        targets = d["targets"]
-
-        ids = ids.to(device, dtype=torch.long)
-        token_type_ids = token_type_ids.to(device, dtype=torch.long)
-        mask = mask.to(device, dtype=torch.long)
-        targets = targets.to(device, dtype=torch.float)
-
-        optimizer.zero_grad()
-        output = model(
-            ids=ids,
-            mask=mask,
-            token_type_ids=token_type_ids
-        )
-
-        loss = loss_fn(output, targets)
-        loss.backward()
-
-        optimizer.step()
-        scheduler.step()
-
-
-def eval_func(data_loader, model, device):
+    # Put the model in "evaluation" mode, meaning feed-forward operation.
     model.eval()
 
-    fin_targets = []
-    fin_output = []
+    # Run the text through BERT, and collect all of the hidden states produced
+    # from all 12 layers.
 
+    # don't need to calculate gradients
     with torch.no_grad():
-        for bi, d in tqdm(enumerate(data_loader), total=len(data_loader)):
-            ids = d["ids"]
-            token_type_ids = d["token_type_ids"]
-            mask = d["mask"]
-            targets = d["targets"]
+        outputs = model(tokens_tensor, segments_tensor)
 
-            ids = ids.to(device, dtype=torch.long)
-            token_type_ids = token_type_ids.to(device, dtype=torch.long)
-            mask = mask.to(device, dtype=torch.long)
-            targets = targets.to(device, dtype=torch.long)
+        # Evaluating the model will return a different number of objects based on
+        # how it's  configured in the `from_pretrained` call earlier. In this case,
+        # becase we set `output_hidden_states = True`, the third item will be the
+        # hidden states from all layers. See the documentation for more details:
+        # https://huggingface.co/transformers/model_doc/bert.html#bertmodel
+        hidden_states = outputs[2]
 
-            output = model(
-                ids=ids,
-                masks=mask,
-                token_type_ids=token_type_ids
-            )
+    # i don't think we need token embeddings
 
-            fin_targets.extend(targets.cpu().detach().numpy().to_list())
-            fin_targets.extend(torch.sigmoid(output).cpu().detach().numpy().to_list())
+    # Concatenate the tensors for all layers. We use `stack` here to
+    # create a new dimension in the tensor.
+    # token_embeddings = torch.stack(hidden_states, dim=0)
 
-        return fin_output, fin_targets
+    # Remove dimension 1, the "batches".
+    # token_embeddings = torch.squeeze(token_embeddings, dim=1)
 
+    # Swap dimensions 0 and 1.
+    # token_embeddings = token_embeddings.permute(1, 0, 2)
 
-def run():
-    # need to change the inputs
-    df = pd.read_json('../input/news-category-dataset/News_Category_Dataset_v2.json', lines=True)
-    data = pd.DataFrame({
-        'text': df['headline'] + df['short_description'],
-        'label': df['category']
-    })
+    # `token_vecs` is a tensor with shape [22 x 768]
+    token_vecs = hidden_states[-2][0]
 
-    encoder = LabelEncoder()
-    data['label'] = encoder.fit_transform(data['label'])
+    # Calculate the average of all token vectors.
+    sentence_embedding = torch.mean(token_vecs, dim=0)
 
-    df_train, df_valid = train_test_split(data, test_size=0.1, random_state=23, stratify=data.label.values)
+    # add embedding to our embedding corpora
 
-    df_train = df_train.reset_index(drop=True)
-    df_valid = df_valid.reset_index(drop=True)
+    # print ("Our final sentence embedding vector of shape:", sentence_embedding.size())
 
-    train_dataset = DATALoader(
-        data=df_train.text.values,
-        target=df_train.label.values,
-        max_length=512
-    )
-
-    train_data_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=8,
-        num_workers=4,
-    )
-
-    val_dataset = DATALoader(
-        data=df_valid.text.values,
-        target=df_valid.label.values,
-        max_length=512
-    )
-
-    val_data_loader = torch.utils.data.DataLoader(
-        val_dataset,
-        batch_size=4,
-        num_workers=1,
-    )
-
-    device = torch.device("cuda")
-    model = BERTClassification()
-
-    param_optimizer = list(model.named_parameters())
-    no_decay = [
-        "bias",
-        "LayerNorm,bias",
-        "LayerNorm.weight",
-    ]
-    optimizer_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
-         'weight_decay': 0.001},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)],
-         'weight_decay': 0.0}
-    ]
-
-    num_train_steps = int(len(df_train) / 8 * 10)
-
-    optimizers = AdamW(optimizer_parameters, lr=3e-5)
-
-    scheduler = get_linear_schedule_with_warmup(
-        optimizers,
-        num_warmup_steps=0,
-        num_training_steps=num_train_steps
-
-    )
-
-    best_accuracy = 0
-    for epoch in range(5):
-        train_func(data_loader=train_data_loader, model=model, optimizer=optimizers, device=device, scheduler=scheduler)
-        outputs, targets = eval_func(data_loader=train_data_loader, model=model, device=device)
-        outputs = np.array(outputs) >= 0.5
-        accuracy = metrics.accuracy_score()
-        print(f"Accuracy Score: {accuracy}")
-
-        if accuracy > best_accuracy:
-            torch.save(model.state_dict(), "model.bin")
-            best_accuracy = accuracy
+    return sentence_embedding
 
 
-if __name__ == "__main__":
-    run()
+# This is me testing the output of my function. Pretty sure it works.
+# print(embed_message("hello?", tokenizer, model))

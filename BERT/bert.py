@@ -21,6 +21,30 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     level=logging.INFO)
 
 
+# Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
+def get_topk_similar(k, query, corpus_embeddings):
+        top_k = min(k, len(corpus_embeddings))
+        query_embedding = embedder.encode(query, show_progress_bar=False)
+        # We use cosine-similarity and torch.topk to find the highest 5 scores
+        cos_scores = util.cos_sim(query_embedding, corpus_embeddings)[0]
+        top_results = torch.topk(cos_scores, k=top_k)
+
+        return top_results
+
+def get_next_line(line_id, convo_mappings, movie_lines):
+    line_id = movie_lines[:,0][idx]
+
+    next_line = "[N/A]"
+    line_filter = convo_mappings.map(lambda u: line_id in u)
+    filtered_df = convo_mappings[line_filter]
+    convo = filtered_df.iloc[0]
+    if convo.index(line_id) != len(convo)-1:
+        next_line = convo[convo.index(line_id)+1] #L000
+        next_line = movie_lines[:,1][np.where(movie_lines[:,0]==next_line)][0]
+    return next_line
+    
+
+
 if __name__ == '__main__':
 
     # This is a pretrained model based on BERT, I'm using it to create our sentence embeddings
@@ -85,6 +109,7 @@ if __name__ == '__main__':
         # i.e. " ['L000', 'L001', 'L002']" -> ['L000', 'L001', 'L002']
         movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(lambda x: x.strip())
         movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(literal_eval)
+        convo_mappings = movie_conversations_df.lineIDs
 
         sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
                       'data/sarcasm_v2/HYP-sarc-notsarc.csv',
@@ -114,7 +139,7 @@ if __name__ == '__main__':
         with open('embeddings.pkl', "wb") as fOut:
             pickle.dump({'movie_lines': movie_lines, 
                          'sarc_lines': sarc_lines, 
-                         'convo_mappings': movie_conversations_df.lineIDs, 
+                         'convo_mappings': convo_mappings, 
                          'sarc_embeddings': sarc_embeddings, 
                          'movie_embeddings': movie_embeddings}, 
                         fOut, 
@@ -131,25 +156,26 @@ if __name__ == '__main__':
         print('Calculating response...')
 
         # Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
-        top_k = min(5, len(movie_lines))
-        query_embedding = embedder.encode(query)
-        # We use cosine-similarity and torch.topk to find the highest 5 scores
-        cos_scores = util.cos_sim(query_embedding, movie_embeddings)[0]
-        top_results = torch.topk(cos_scores, k=top_k)
-
+        top_results = get_topk_similar(5, query, movie_embeddings)
+        
         print("\n\n======================\n\n")
         print("Query:", query)
         print("\nTop 5 most similar sentences in corpus:")
-
+        
+        ranking = 1
         for score, idx in zip(top_results[0], top_results[1]):
-            print("Most similar line:", movie_lines[:,1][idx], "(Score: {:.4f})".format(score))
-            line = movie_lines[:,0][idx]
+            print(str(ranking) + ') ' + movie_lines[:,1][idx] + " (Score: {:.4f})".format(score) + '\n')
 
-            next_line = "[N/A]"
-            line_filter = movie_conversations_df['lineIDs'].map(lambda u: line in u)
-            filtered_df = movie_conversations_df[line_filter]
-            convo = filtered_df['lineIDs'].iloc[0]
-            if convo.index(line) != len(convo)-1:
-                next_line = convo[convo.index(line)+1]
-                next_line = movie_dialogues_df[movie_dialogues_df['lineID'] == next_line].text.values[0]
-            print("next line:", next_line, "\n")
+            line_id = movie_lines[:,0][idx]
+
+            next_line = get_next_line(line_id, convo_mappings, movie_lines)
+            print("   Corresponding response: " + next_line + '\n')
+
+            if next_line != "[N/A]":
+                print("   Sarcastic responses:\n")
+                top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
+                for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
+                    print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
+            
+            ranking += 1
+            print()

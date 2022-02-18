@@ -26,36 +26,36 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 from data import convert_sarc_data_to_dataframe
 
 if __name__ == '__main__':
-    movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
-    movie_dialogues_df = pd.read_csv(movie_dialogues_file, index_col=False,
-                                         sep=r'\+{3}\$\+{3}',
-                                         engine='python',
-                                         header=None,
-                                         skipinitialspace=True,
-                                         encoding='unicode_escape',
-                                         na_filter=False,
-                                         names=['lineID', 'charID', 'movieID', 'charName', 'text'])
+    # movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
+    # movie_dialogues_df = pd.read_csv(movie_dialogues_file, index_col=False,
+    #                                      sep=r'\+{3}\$\+{3}',
+    #                                      engine='python',
+    #                                      header=None,
+    #                                      skipinitialspace=True,
+    #                                      encoding='unicode_escape',
+    #                                      na_filter=False,
+    #                                      names=['lineID', 'charID', 'movieID', 'charName', 'text'])
 
-    movie_conversations_file = 'data/cornell movie-dialogs corpus/movie_conversations.txt'
-    movie_conversations_df = pd.read_csv(movie_conversations_file, index_col=False,
-                                         sep=r'\+{3}\$\+{3}',
-                                         engine='python',
-                                         header=None,
-                                         skipinitialspace=True,
-                                         encoding='unicode_escape',
-                                         na_filter=False,
-                                         names=['charID1', 'charID2', 'movieID', 'lineIDs'])
+    # movie_conversations_file = 'data/cornell movie-dialogs corpus/movie_conversations.txt'
+    # movie_conversations_df = pd.read_csv(movie_conversations_file, index_col=False,
+    #                                      sep=r'\+{3}\$\+{3}',
+    #                                      engine='python',
+    #                                      header=None,
+    #                                      skipinitialspace=True,
+    #                                      encoding='unicode_escape',
+    #                                      na_filter=False,
+    #                                      names=['charID1', 'charID2', 'movieID', 'lineIDs'])
 
 
-    movie_dialogues_df.lineID       = movie_dialogues_df.lineID.apply(lambda x: x.strip())
-    movie_dialogues_df.text         = movie_dialogues_df.text.apply(lambda x: x.strip())
+    # movie_dialogues_df.lineID       = movie_dialogues_df.lineID.apply(lambda x: x.strip())
+    # movie_dialogues_df.text         = movie_dialogues_df.text.apply(lambda x: x.strip())
     
-    movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(lambda x: x.strip())
-    movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(literal_eval)
-    # print('Num sentences: {:,}\n'.format(movie_conversations_df.shape[0]))
-    movie_filter = movie_conversations_df['movieID'].map(lambda u: "m0" in u)
-    filtered_df = movie_conversations_df[movie_filter]
-    print(filtered_df)
+    # movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(lambda x: x.strip())
+    # movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(literal_eval)
+    # # print('Num sentences: {:,}\n'.format(movie_conversations_df.shape[0]))
+    # movie_filter = movie_conversations_df['movieID'].map(lambda u: "m0" in u)
+    # filtered_df = movie_conversations_df[movie_filter]
+    # print(filtered_df)
 
 
     # lines = np.column_stack((movie_dialogues_df.text.values, movie_dialogues_df.lineID.values))
@@ -78,18 +78,18 @@ if __name__ == '__main__':
         # Load sentences & embeddings from disc
         with open('embeddings.pkl', "rb") as fIn:
             stored_data = pickle.load(fIn)
-            stored_sentences = stored_data['sentences']
+            stored_sentences  = stored_data['sentences']
+            stored_convo_maps = stored_data['convo_mappings']
             stored_embeddings = stored_data['embeddings']
 
         corpus_embeddings = stored_embeddings
-        lines = stored_sentences
+        convo_mappings    = stored_convo_maps
+        lines             = stored_sentences
     else:
-        print('#### Pre-processing data ####')
+        print('### Pre-processing data ###')
         # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
         ROOT_DIR = os.path.dirname(os.path.abspath(os.curdir))
 
-        print("\n## Preprocessing Data ##")
-        # load datasets into dataframes
         movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
         movie_dialogues_df = pd.read_csv(movie_dialogues_file, index_col=False,
                                          sep=r'\+{3}\$\+{3}',
@@ -101,19 +101,33 @@ if __name__ == '__main__':
                                          names=['lineID', 'charID', 'movieID', 'charName', 'text'])
 
         movie_dialogues_df.lineID       = movie_dialogues_df.lineID.apply(lambda x: x.strip())
-        movie_dialogues_df.movieID      = movie_dialogues_df.movieID.apply(lambda x: x.strip())
         movie_dialogues_df.text         = movie_dialogues_df.text.apply(lambda x: x.strip())
 
-        lines = np.column_stack((movie_dialogues_df.text.values, movie_dialogues_df.movieID.values, movie_dialogues_df.lineID.values))
+        movie_conversations_file = 'data/cornell movie-dialogs corpus/movie_conversations.txt'
+        movie_conversations_df = pd.read_csv(movie_conversations_file, index_col=False,
+                                         sep=r'\+{3}\$\+{3}',
+                                         engine='python',
+                                         header=None,
+                                         skipinitialspace=True,
+                                         encoding='unicode_escape',
+                                         na_filter=False,
+                                         names=['charID1', 'charID2', 'movieID', 'lineIDs'])
+
+        # strip all whitespace and convert string to list
+        # i.e. " ['L000', 'L001', 'L002']" -> ['L000', 'L001', 'L002']
+        movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(lambda x: x.strip())
+        movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(literal_eval)
+
+        # lines = [[lineID#, text],
+        #          ["L0000", "this is an example!"],]
+        lines = np.column_stack((movie_dialogues_df.lineID.values, movie_dialogues_df.text.values))
 
         print('### Encoding corpora ###\n')
-        # for now all of our sentence embeddings will be stored in memory, we'll see how heavy memory usage is
-
         # Start the multi-process pool on all available CUDA devices
         pool = embedder.start_multi_process_pool()
 
         # Compute the embeddings using the multi-process pool
-        corpus_embeddings = embedder.encode_multi_process(lines[:,0], pool)
+        corpus_embeddings = embedder.encode_multi_process(lines[:,1], pool)
         print("Embeddings computed. Shape:", corpus_embeddings.shape)
 
         # Optional: Stop the processes in the pool
@@ -121,7 +135,7 @@ if __name__ == '__main__':
 
         # Store sentences & embeddings on disc
         with open('embeddings.pkl', "wb") as fOut:
-            pickle.dump({'sentences': lines, 'embeddings': corpus_embeddings}, fOut, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump({'sentences': lines, 'convo_mappings': movie_conversations_df.lineIDs, 'embeddings': corpus_embeddings}, fOut, protocol=pickle.HIGHEST_PROTOCOL)
 
     # https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/semantic-search/semantic_search.py
     print(corpus_embeddings[:5])
@@ -145,17 +159,14 @@ if __name__ == '__main__':
         print("\nTop 5 most similar sentences in corpus:")
 
         for score, idx in zip(top_results[0], top_results[1]):
-            print(lines[:,0][idx], "(Score: {:.4f})".format(score))
-            line = lines[:,2][idx]
-            movie_id = lines[:,1][idx]
-            
-            # print(line, movie_id)
-            next_line = "x"
-            
+            print("Most similar line:", lines[:,1][idx], "(Score: {:.4f})".format(score))
+            line = lines[:,0][idx]
+
+            next_line = "[N/A]"
             line_filter = movie_conversations_df['lineIDs'].map(lambda u: line in u)
             filtered_df = movie_conversations_df[line_filter]
             convo = filtered_df['lineIDs'].iloc[0]
             if convo.index(line) != len(convo)-1:
                 next_line = convo[convo.index(line)+1]
                 next_line = movie_dialogues_df[movie_dialogues_df['lineID'] == next_line].text.values[0]
-            print("next line:", next_line)
+            print("next line:", next_line, "\n")

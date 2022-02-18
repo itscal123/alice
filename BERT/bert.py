@@ -21,17 +21,31 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     handlers=[LoggingHandler()],
                     level=logging.INFO)
-
+# OVERALL TODO
+# These are just notes for my reference -- read at risk of confusion:
+# I want to fine-tune the model on text classification using the sarcasm dataset
+# There are many ways to go about this:
+# 1) Using the huggingface doc for how to fine-tune pretrained BERT
+# 2) Use sbert doc for tuning for specific downstream task or even multitask train
+# 3) Use template how-to code
+# Then, save the model, and use as the base model for our sentence transformer (class defined below)
+# This class will be the one used for the interface, it will have functions for embedding the query and retrieving
+# a response
 
 class BiEncoder(nn.Module):
     """ Hugging face SentenceTransformer model to generate sentence embeddings and output a response to a query
         calculated by the argmax of the dot product with pre-computed embeddings. Additionally, our model is fine-tuned
         for Sentence Classification on sarcastic versus non-sarcastic sentences.
         References: 1) https://aajanki.github.io/fi-sentence-embeddings-eval/models.html for basic architecture
+                    1.5) https://www.sbert.net/docs/training/overview.html for architecture and training
                     2) https://github.com/UKPLab/sentence-transformers/blob/master/examples/training/other/training_multi-task.py
                         for multitask training
                     3) https://www.sbert.net/examples/applications/semantic-search/README.html for retrieving responses
                         based on semantic similarity/search
+                    4) https://www.analyticsvidhya.com/blog/2020/07/transfer-learning-for-nlp-fine-tuning-bert-for-text-classification/#:~:text=It%20is%20designed%20to%20pre,wide%20range%20of%20NLP%20tasks.%E2%80%9D
+                        https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb
+                        https://huggingface.co/docs/transformers/training
+                        for fine-tuning
                     """
 
     def __init__(self, model_name='multi-qa-distilbert-dot-v1'):
@@ -41,10 +55,6 @@ class BiEncoder(nn.Module):
         super(BERTAlice, self).__init__()
         model = SentenceTransformer(model_name)
         # TODO above code is a placeholder (the base version -- before we build the model for our task)
-        # Flesh out our architecture:
-        #   (1) Layer for word embedder (BERT)
-        #   (2/3) Layer for pooling
-        #   (3/3) Layer for Sentence Classification
 
 
     def __repr__(self):

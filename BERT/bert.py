@@ -34,6 +34,33 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 # This class will be the one used for the interface, it will have functions for embedding the query and retrieving
 # a response
 
+# STATIC FUNCTIONS
+
+# if we ever wanted to load the embeddings into something else without instantiating the class, or loading the model
+def _load_embeddings():
+    """ Loads the embeddings, then returns a dictionary with entries as the different files """
+    pickled_embs_file = 'embeddings.pkl'
+    embeddings = dict()
+    if os.path.exists(pickled_embs_file):
+        # Load sentences & embeddings from disc
+        with open('embeddings.pkl', "rb") as fIn:
+            stored_data = pickle.load(fIn)
+            stored_movie_lines = stored_data['movie_lines']
+            stored_sarc_lines = stored_data['sarc_lines']
+            stored_convo_maps = stored_data['convo_mappings']
+            stored_sarc_embeddings = stored_data['sarc_embeddings']
+            stored_movie_embeddings = stored_data['movie_embeddings']
+
+        embeddings['sarc_embeddings'] = stored_sarc_embeddings
+        embeddings['movie_embeddings'] = stored_movie_embeddings
+        embeddings['convo_mappings'] = stored_convo_maps
+        embeddings['movie_lines'] = stored_movie_lines
+        embeddings['sarc_lines'] = stored_sarc_lines
+    else:
+        print("Embeddings don't exist! Please run bert.py")
+    return embeddings
+
+
 class BertAlice:
     """ Hugging face SentenceTransformer model to generate sentence embeddings and output a response to a query
         calculated by the argmax of the dot product with pre-computed embeddings. Additionally, our model is fine-tuned
@@ -53,7 +80,7 @@ class BertAlice:
 
     def __init__(self, model_name='multi-qa-distilbert-dot-v1'):
         """ Loads the correct model.
-            params: model_name = Name of the model we want to load, it is set to a default because we've already
+            :parameter model_name Name of the model we want to load, it is set to a default because we've already
             calculated the embeddings from this model. """
         self.model = SentenceTransformer(model_name)
         self.embeddings = self._load_embeddings()
@@ -66,8 +93,8 @@ class BertAlice:
         """ Training function for our model. We will be using this to fine-tune the base model for our downstream task.
             The goal is to keep adjusting our model weights to distinguish more humorous/sarcastic sentences versus
             non-sarcastic ones. e.g. Sentence Classification
-            params: data = Data that we will be using to train on. Includes sentences and their labels.
-                    max_seq_length = The length at which we will truncate our tokenized inputs because BERT needs
+            :parameter data Data that we will be using to train on. Includes sentences and their labels.
+            :parameter max_seq_length The length at which we will truncate our tokenized inputs because BERT needs
                                         normalized vector lengths. """
         # TODO
         # I think we should do multitask training, so a bunch of preprocessing will go here
@@ -76,26 +103,31 @@ class BertAlice:
 
     def get_response(self, query: str):
         """ Run a semantic search against our query, then output the following line from our corpus of movie dialogue.
-            params: query = The user query """
+            :parameter query The user query """
         # TODO
         query_embedding = self._encode(query)
         # compare query embedding to movie embeddings via cosine similarity
         cos_scores = util.cos_sim(query_embedding, self.embeddings['movie_embeddings'])[0]
         # get most similar sentence
+        # topk returns a named tuple of Tensors: ('values', 'indices')
+        # in our case, the tuple will consist of two Tensors of size 1
         top_result = torch.topk(cos_scores, 1)
         # return the next line of dialogue after the top result
         return self._get_next_line(top_result)
 
-    # HELPER FUCNTIONS
+    # HELPER FUNCTIONS
 
     def _encode(self, query: str):
         """ Input is a query string which we will encode through our model. The output is our query embedding. """
         return self.model.encode(query, show_progress_bar=False)
 
     def _get_next_line(self, line):
-        """ Outputs the following line of dialogue given a line from the movie lines corpus """
-        score = top_results[0][0]
-        idx = top_results[1][0]
+        """ Outputs the following line of dialogue given a line from the movie lines corpus
+            :parameter line is a tuple of Tensors of size 1, ('values', 'indices')
+            :return a string with the next line """
+        # from the line: (values, indices), get the index of the top response
+        idx = line[1][0]
+        # @ ethan pls elaborate here ty
         line_id = self.embeddings['movie_lines'][:, 0][idx]
 
         next_line = "[N/A]"
@@ -107,42 +139,20 @@ class BertAlice:
             next_line = movie_lines[:, 1][np.where(movie_lines[:, 0] == next_line)][0]
         return next_line
 
-    def _load_embeddings(self):
-        """ Loads the embeddings, then returns a dictionary with entries as the different files """
-        pickled_embs_file = 'embeddings.pkl'
-        embeddings = dict()
-        if os.path.exists(pickled_embs_file):
-            # Load sentences & embeddings from disc
-            with open('embeddings.pkl', "rb") as fIn:
-                stored_data = pickle.load(fIn)
-                stored_movie_lines = stored_data['movie_lines']
-                stored_sarc_lines = stored_data['sarc_lines']
-                stored_convo_maps = stored_data['convo_mappings']
-                stored_sarc_embeddings = stored_data['sarc_embeddings']
-                stored_movie_embeddings = stored_data['movie_embeddings']
-
-            embeddings['sarc_embeddings'] = stored_sarc_embeddings
-            embeddings['movie_embeddings'] = stored_movie_embeddings
-            embeddings['convo_mappings'] = stored_convo_maps
-            embeddings['movie_lines'] = stored_movie_lines
-            embeddings['sarc_lines'] = stored_sarc_lines
-        else:
-            print("Embeddings don't exist! Please run bert.py")
-        return embeddings
-
     # EXTRA FUNCTIONS
 
     def get_topk_similar(self, k, query):
         """ Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
             put this into the class for funsiez... idk if we will actually need it
-            params: query = string
-                    k = int of how many similar results to search for
-            output: Union of tensors with the top k most similar results """
+            :param query string
+            :param int of how many similar results to search for
+            :return Union of tensors with the top k most similar results """
 
         top_k = min(k, len(self.embeddings['corpus_embeddings']))
         query_embedding = self._encode(query)
         # We use cosine-similarity and torch.topk to find the highest k scores
         cos_scores = util.cos_sim(query_embedding, self.embeddings['corpus_embeddings'])[0]
+        # topk returns named tuples of the results as a named tuple of tensors 'values' and 'indices'
         return torch.topk(cos_scores, k=top_k)
 
     def get_sarcastic_responses(self, query: str, k: int):
@@ -151,6 +161,7 @@ class BertAlice:
                     k = int of how many results to output """
         top_results = self.get_topk_similar(k, query)
         ranking = 1
+        # top_results is a tuple of tensors: ('values': Tensor, 'indices': Tensor)
         for score, idx in zip(top_results[0], top_results[1]):
             print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
 

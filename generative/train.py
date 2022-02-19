@@ -593,7 +593,7 @@ if __name__ == "__main__":
     encoder.eval()
     decoder.eval()
 
-    # Save the encoder, decoder, and search method
+    # Save the encoder and decoder
     print("Saving model components")
     torch.save(encoder, "generative\models\encoder.pt")
     torch.save(decoder, "generative\models\decoder.pt")

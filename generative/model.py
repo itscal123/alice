@@ -11,8 +11,6 @@ class Generative():
     def __init__(self):
         self.encoder = torch.load("generative\models\encoder.pt")
         self.decoder = torch.load("generative\models\decoder.pt")
-        self.searcher = torch.load("generative\models\searcher.pt")
-        self.greedy = GreedySearchDecoder(self.encoder, self.decoder)
         self.beamSearcher = BeamSearchDecoder(self.encoder, self.decoder, 10)
         data = pickle.load(open("generative\data.p", "rb"))
         voc, pairs, save_dir, corpus_name = data.loadData()
@@ -71,7 +69,6 @@ class Generative():
                 output_words = self.evaluate(input_sentence)
 
                 # Format and print reponse
-                output_words[:] = [x for x in output_words if not (x == "EOS" or x == "PAD")]
                 print("ALICE:", " ".join(output_words))
             
             except KeyError as e:

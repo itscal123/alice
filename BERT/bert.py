@@ -21,6 +21,8 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     handlers=[LoggingHandler()],
                     level=logging.INFO)
+
+
 # OVERALL TODO
 # These are just notes for my reference -- read at risk of confusion:
 # I want to fine-tune the model on text classification using the sarcasm dataset
@@ -32,7 +34,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 # This class will be the one used for the interface, it will have functions for embedding the query and retrieving
 # a response
 
-class BiEncoder(nn.Module):
+class BertAlice:
     """ Hugging face SentenceTransformer model to generate sentence embeddings and output a response to a query
         calculated by the argmax of the dot product with pre-computed embeddings. Additionally, our model is fine-tuned
         for Sentence Classification on sarcastic versus non-sarcastic sentences.
@@ -52,13 +54,11 @@ class BiEncoder(nn.Module):
         """ Loads the correct model.
             params: model_name = Name of the model we want to load, it is set to a default because we've already
             calculated the embeddings from this model. """
-        super(BERTAlice, self).__init__()
-        model = SentenceTransformer(model_name)
-        # TODO above code is a placeholder (the base version -- before we build the model for our task)
-
+        self.model = SentenceTransformer(model_name)
+        self.embeddings = self._load_embeddings()
 
     def __repr__(self):
-        #TODO
+        # TODO
         pass
 
     def train(self, data, max_seq_length):
@@ -73,42 +73,98 @@ class BiEncoder(nn.Module):
         # https://github.com/UKPLab/sentence-transformers/blob/master/examples/training/other/training_multi-task.py
         pass
 
-    def encode(self, query: str):
+    def _encode(self, query: str):
         """ Input is a query string which we will encode through our model. The output is our query embedding. """
-        # TODO
-        # Should be fairly simple, reference our code below
-        return model.encode(query)
+        return self.model.encode(query, show_progress_bar=False)
 
     def get_response(self, query: str):
         """ Run a semantic search against our query, then output the following line from our corpus of movie dialogue.
             params: query = The user query """
         # TODO
-        # Basically a copy paste from what we have written below (the very last query loop)
-        pass
+        query_embedding = self._encode(query)
+        # compare query embedding to movie embeddings via cosine similarity
+        cos_scores = util.cos_sim(query_embedding, self.embeddings['movie_embeddings'])[0]
+        # get most similar sentence
+        top_result = torch.topk(cos_scores, 1)
+        # return the next line of dialogue after the top result
+        return self._get_next_line(top_result)
 
-# Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
-def get_topk_similar(k, query, corpus_embeddings):
-        top_k = min(k, len(corpus_embeddings))
-        query_embedding = embedder.encode(query, show_progress_bar=False)
+    def get_topk_similar(self, k, query):
+        """ Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
+            put this into the class for funsiez... idk if we will actually need it
+            params: query = string
+                    k = int of how many similar results to search for
+            output: Union of tensors with the top k most similar results """
+
+        top_k = min(k, len(self.embeddings['corpus_embeddings']))
+        query_embedding = self._encode(query)
         # We use cosine-similarity and torch.topk to find the highest 5 scores
-        cos_scores = util.cos_sim(query_embedding, corpus_embeddings)[0]
+        cos_scores = util.cos_sim(query_embedding, self.embeddings['corpus_embeddings'])[0]
         top_results = torch.topk(cos_scores, k=top_k)
 
         return top_results
 
-def get_next_line(line_id, convo_mappings, movie_lines):
-    line_id = movie_lines[:,0][idx]
+    def get_sarcastic_responses(self, query: str, k: int):
+        """ Output sarcastic responses for a query
+            params: query = string
+                    k = int of how many results to output """
+        top_results = self.get_topk_similar(k, query)
+        ranking = 1
+        for score, idx in zip(top_results[0], top_results[1]):
+            print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
 
-    next_line = "[N/A]"
-    line_filter = convo_mappings.map(lambda u: line_id in u)
-    filtered_df = convo_mappings[line_filter]
-    convo = filtered_df.iloc[0]
-    if convo.index(line_id) != len(convo)-1:
-        next_line = convo[convo.index(line_id)+1] #L000
-        next_line = movie_lines[:,1][np.where(movie_lines[:,0]==next_line)][0]
-    return next_line
-    
+            line_id = movie_lines[:, 0][idx]
 
+            next_line = get_next_line(line_id, convo_mappings, movie_lines)
+            print("   Corresponding response: " + next_line + '\n')
+
+            if next_line != "[N/A]":
+                print("   Sarcastic responses:\n")
+                top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
+                for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
+                    print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
+
+            ranking += 1
+            print()
+
+    def _get_next_line(self, line):
+        """ Outputs the following line of dialogue given a line from the movie lines corpus """
+        # TODO
+        # not sure about this line-- what does idx do?
+        # i see down below that you've zipped the top 2 results, but still unsure of what that does as well
+        line_id = self.embeddings['movie_lines'][:, 0][idx]
+
+        next_line = "[N/A]"
+        line_filter = self.embeddings['convo_mappings'].map(lambda u: line_id in u)
+        filtered_df = self.embeddings['convo_mappings'][line_filter]
+        convo = filtered_df.iloc[0]
+        if convo.index(line_id) != len(convo) - 1:
+            next_line = convo[convo.index(line_id) + 1]  # L000
+            next_line = movie_lines[:, 1][np.where(movie_lines[:, 0] == next_line)][0]
+        return next_line
+
+    def _load_embeddings(self):
+        """ Loads the embeddings, then returns a dictionary with entries as the different files """
+        pickled_embs_file = 'embeddings.pkl'
+        embeddings = dict()
+        if os.path.exists(pickled_embs_file):
+            # Load sentences & embeddings from disc
+            with open('embeddings.pkl', "rb") as fIn:
+                stored_data = pickle.load(fIn)
+                stored_movie_lines = stored_data['movie_lines']
+                stored_sarc_lines = stored_data['sarc_lines']
+                stored_convo_maps = stored_data['convo_mappings']
+                stored_sarc_embeddings = stored_data['sarc_embeddings']
+                stored_movie_embeddings = stored_data['movie_embeddings']
+
+            embeddings['sarc_embeddings'] = stored_sarc_embeddings
+            embeddings['movie_embeddings'] = stored_movie_embeddings
+            embeddings['convo_mappings'] = stored_convo_maps
+            embeddings['movie_lines'] = stored_movie_lines
+            embeddings['sarc_lines'] = stored_sarc_lines
+        else:
+            print("Embeddings don't exist! Please run bert.py")
+        return embeddings
 
 if __name__ == '__main__':
 
@@ -173,8 +229,8 @@ if __name__ == '__main__':
         # strip all whitespace and convert string to list
         # i.e. " ['L000', 'L001', 'L002']" -> ['L000', 'L001', 'L002']
 
-        movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(lambda x: x.strip())
-        movie_conversations_df.lineIDs  = movie_conversations_df.lineIDs.apply(literal_eval)
+        movie_conversations_df.lineIDs = movie_conversations_df.lineIDs.apply(lambda x: x.strip())
+        movie_conversations_df.lineIDs = movie_conversations_df.lineIDs.apply(literal_eval)
         convo_mappings = movie_conversations_df.lineIDs
 
         sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
@@ -203,12 +259,12 @@ if __name__ == '__main__':
 
         # Store sentences & embeddings on disc
         with open('embeddings.pkl', "wb") as fOut:
-            pickle.dump({'movie_lines': movie_lines, 
-                         'sarc_lines': sarc_lines, 
-                         'convo_mappings': convo_mappings, 
-                         'sarc_embeddings': sarc_embeddings, 
-                         'movie_embeddings': movie_embeddings}, 
-                        fOut, 
+            pickle.dump({'movie_lines': movie_lines,
+                         'sarc_lines': sarc_lines,
+                         'convo_mappings': convo_mappings,
+                         'sarc_embeddings': sarc_embeddings,
+                         'movie_embeddings': movie_embeddings},
+                        fOut,
                         protocol=pickle.HIGHEST_PROTOCOL)
 
     # https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/semantic-search/semantic_search.py
@@ -223,16 +279,16 @@ if __name__ == '__main__':
 
         # Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
         top_results = get_topk_similar(5, query, movie_embeddings)
-        
+
         print("\n\n======================\n\n")
         print("Query:", query)
         print("\nTop 5 most similar sentences in corpus:")
-        
+
         ranking = 1
         for score, idx in zip(top_results[0], top_results[1]):
-            print(str(ranking) + ') ' + movie_lines[:,1][idx] + " (Score: {:.4f})".format(score) + '\n')
+            print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
 
-            line_id = movie_lines[:,0][idx]
+            line_id = movie_lines[:, 0][idx]
 
             next_line = get_next_line(line_id, convo_mappings, movie_lines)
             print("   Corresponding response: " + next_line + '\n')
@@ -242,6 +298,6 @@ if __name__ == '__main__':
                 top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
                 for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
                     print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
-            
+
             ranking += 1
             print()

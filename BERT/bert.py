@@ -1,13 +1,7 @@
 import torch
 import os
 import pandas as pd
-from transformers import BertTokenizer, BertModel
 from sentence_transformers import SentenceTransformer, util, LoggingHandler
-from tqdm import tqdm
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler
-from torch.optim import AdamW
-from torch import nn
-import matplotlib.pyplot as plt
 import numpy as np
 from ast import literal_eval
 import pickle
@@ -34,10 +28,18 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 # This class will be the one used for the interface, it will have functions for embedding the query and retrieving
 # a response
 
+# for train module:
+# from transformers import BertTokenizer, BertModel
+# from tqdm import tqdm
+# from torch.utils.data import TensorDataset, DataLoader, RandomSampler
+# from torch.optim import AdamW
+# from torch import nn
+# import matplotlib.pyplot as plt
+
 # STATIC FUNCTIONS
 
 # if we ever wanted to load the embeddings into something else without instantiating the class, or loading the model
-def _load_embeddings():
+def load_embeddings():
     """ Loads the embeddings, then returns a dictionary with entries as the different files """
     pickled_embs_file = 'embeddings.pkl'
     embeddings = dict()
@@ -78,12 +80,12 @@ class BertAlice:
                         for fine-tuning
                     """
 
-    def __init__(self, model_name='multi-qa-distilbert-dot-v1'):
+    def __init__(self, model_name='multi-qa-distilbert-dot-v1', device='cpu'):
         """ Loads the correct model.
             :parameter model_name Name of the model we want to load, it is set to a default because we've already
             calculated the embeddings from this model. """
-        self.model = SentenceTransformer(model_name)
-        self.embeddings = self._load_embeddings()
+        self.model = SentenceTransformer(model_name, device=device)
+        self.embeddings = load_embeddings()
 
     def __repr__(self):
         # TODO
@@ -126,7 +128,7 @@ class BertAlice:
             :parameter line is a tuple of Tensors of size 1, ('values', 'indices')
             :return a string with the next line """
         # from the line: (values, indices), get the index of the top response
-        idx = line[1][0]
+        idx = int(line[1][0])
         # @ ethan pls elaborate here ty
         line_id = self.embeddings['movie_lines'][:, 0][idx]
 
@@ -136,22 +138,23 @@ class BertAlice:
         convo = filtered_df.iloc[0]
         if convo.index(line_id) != len(convo) - 1:
             next_line = convo[convo.index(line_id) + 1]  # L000
-            next_line = movie_lines[:, 1][np.where(movie_lines[:, 0] == next_line)][0]
+            next_line = self.embeddings['movie_lines'][:, 1][np.where(self.embeddings['movie_lines'][:, 0] == next_line)][0]
         return next_line
 
     # EXTRA FUNCTIONS
 
-    def get_topk_similar(self, k, query):
+    def get_topk_similar(self, k, query, corpus_embedding='movie_embeddings'):
         """ Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
             put this into the class for funsiez... idk if we will actually need it
             :param query string
             :param int of how many similar results to search for
+            :param corpus_embedding which corpus we want to compare embeddings against
             :return Union of tensors with the top k most similar results """
 
-        top_k = min(k, len(self.embeddings['corpus_embeddings']))
+        top_k = min(k, len(self.embeddings[corpus_embedding]))
         query_embedding = self._encode(query)
         # We use cosine-similarity and torch.topk to find the highest k scores
-        cos_scores = util.cos_sim(query_embedding, self.embeddings['corpus_embeddings'])[0]
+        cos_scores = util.cos_sim(query_embedding, self.embeddings[corpus_embedding])[0]
         # topk returns named tuples of the results as a named tuple of tensors 'values' and 'indices'
         return torch.topk(cos_scores, k=top_k)
 
@@ -163,56 +166,37 @@ class BertAlice:
         ranking = 1
         # top_results is a tuple of tensors: ('values': Tensor, 'indices': Tensor)
         for score, idx in zip(top_results[0], top_results[1]):
-            print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
+            line = self.embeddings['movie_lines'][:, 1][idx]
+            line_id = self.embeddings['movie_lines'][:, 0][idx]
 
-            line_id = movie_lines[:, 0][idx]
+            print(str(ranking) + ') ' + line + " (Score: {:.4f})".format(score) + '\n')
 
-            next_line = get_next_line(line_id, convo_mappings, movie_lines)
+            next_line = self._get_next_line(line_id)
             print("   Corresponding response: " + next_line + '\n')
 
             if next_line != "[N/A]":
                 print("   Sarcastic responses:\n")
-                top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
+                top_sarcastic_results = self.get_topk_similar(5, next_line, 'sarc_embeddings')
                 for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
-                    print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
-
+                    print("\t- " + self.embeddings['sarc_lines'][i].strip() + " (Score: {:.4f})".format(s))
+            else:
+                print("    No sarcastic response found. Outputting last line instead:\n")
+                print(line + '\n')
             ranking += 1
             print()
 
 
 if __name__ == '__main__':
 
-    # This is a pretrained model based on BERT, I'm using it to create our sentence embeddings
-    embedder = SentenceTransformer('multi-qa-distilbert-dot-v1')
-
-    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    device = torch.device("cpu")
-    embedder.to(device)
-
-    # The following code is to make sentence embeddings faster
-    # https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/computing-embeddings
-    # /computing_embeddings_mutli_gpu.py Important, you need to shield your code with if __name__. Otherwise,
-    # CUDA runs into issues when spawning new processes.
-
-    print('### Finding embeddings... ###')
     pickled_embs_file = 'embeddings.pkl'
-    if os.path.exists(pickled_embs_file):
-        # Load sentences & embeddings from disc
-        with open('embeddings.pkl', "rb") as fIn:
-            stored_data = pickle.load(fIn)
-            stored_movie_lines = stored_data['movie_lines']
-            stored_sarc_lines = stored_data['sarc_lines']
-            stored_convo_maps = stored_data['convo_mappings']
-            stored_sarc_embeddings = stored_data['sarc_embeddings']
-            stored_movie_embeddings = stored_data['movie_embeddings']
-
-        sarc_embeddings = stored_sarc_embeddings
-        movie_embeddings = stored_movie_embeddings
-        convo_mappings = stored_convo_maps
-        movie_lines = stored_movie_lines
-        sarc_lines = stored_sarc_lines
-    else:
+    if not os.path.exists(pickled_embs_file):
         print('### Pre-processing data ###')
+        # This is a pretrained model based on BERT, I'm using it to create our sentence embeddings
+        embedder = SentenceTransformer('multi-qa-distilbert-dot-v1')
+        # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        device = torch.device("cpu")
+        embedder.to(device)
+
         # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
         ROOT_DIR = os.path.dirname(os.path.abspath(os.curdir))
 
@@ -257,6 +241,11 @@ if __name__ == '__main__':
         #          ["L0000", "this is an example!"],]
         movie_lines = np.column_stack((movie_dialogues_df.lineID.values, movie_dialogues_df.text.values))
 
+        # The following code is to make sentence embeddings faster
+        # https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/computing-embeddings
+        # /computing_embeddings_mutli_gpu.py Important, you need to shield your code with if __name__. Otherwise,
+        # CUDA runs into issues when spawning new processes.
+
         print('### Encoding corpora ###\n')
         # Start the multi-process pool on all available CUDA devices
         pool = embedder.start_multi_process_pool()
@@ -281,37 +270,19 @@ if __name__ == '__main__':
                         fOut,
                         protocol=pickle.HIGHEST_PROTOCOL)
 
-    # https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/semantic-search/semantic_search.py
-    print(movie_embeddings[:5])
+        print("Sample of the movie embeddings:\n")
+        print(movie_embeddings[:5])
 
-    query = ""
-    while query != "Quit" and query != "quit" and query != "q":
-        query = input('Say something, or type "Quit," "quit," or "q" to quit: ')
-        if query == "Quit" or query == "quit" or query == "q":
-            break
-        print('Calculating response...')
-
-        # Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
-        top_results = get_topk_similar(5, query, movie_embeddings)
-
-        print("\n\n======================\n\n")
-        print("Query:", query)
-        print("\nTop 5 most similar sentences in corpus:")
-
-        ranking = 1
-        for score, idx in zip(top_results[0], top_results[1]):
-            print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
-
-            line_id = movie_lines[:, 0][idx]
-
-            next_line = get_next_line(line_id, convo_mappings, movie_lines)
-            print("   Corresponding response: " + next_line + '\n')
-
-            if next_line != "[N/A]":
-                print("   Sarcastic responses:\n")
-                top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
-                for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
-                    print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
-
-            ranking += 1
-            print()
+    demo = input("Would you like to demo BertAlice? [y/n]: ")
+    if demo == 'y':
+        bert = BertAlice()
+        query = ""
+        while query != "Quit" and query != "quit" and query != "q":
+            query = input('Say something, or type "Quit," "quit," or "q" to quit: ')
+            if query == "Quit" or query == "quit" or query == "q":
+                break
+            print('Calculating response...')
+            print("\n\n======================\n\n")
+            print("Query:", query)
+            print("\nTop 5 most similar sentences in corpus:")
+            bert.get_sarcastic_responses(query, 5)

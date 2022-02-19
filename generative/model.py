@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 
 import torch
 import pickle
-from train import Encoder, Decoder, GreedySearchDecoder, GlobalAttn
+from train import Encoder, Decoder, GreedySearchDecoder, GlobalAttn, BeamSearchDecoder
 from data import Voc, normalizeString, indexesFromSentence, Data
 import unicodedata
 import codecs
@@ -12,6 +12,8 @@ class Generative():
         self.encoder = torch.load("generative\models\encoder.pt")
         self.decoder = torch.load("generative\models\decoder.pt")
         self.searcher = torch.load("generative\models\searcher.pt")
+        self.greedy = GreedySearchDecoder(self.encoder, self.decoder)
+        self.beamSearcher = BeamSearchDecoder(self.encoder, self.decoder, 10)
         data = pickle.load(open("generative\data.p", "rb"))
         voc, pairs, save_dir, corpus_name = data.loadData()
         self.voc = voc
@@ -19,11 +21,11 @@ class Generative():
         self.device = torch.device("cuda" if USE_CUDA else "cpu")
 
 
-    def evaluate(self, sentence, max_length=10):
+    def evaluate(self, sentence, max_length=8):
         # Format input sentence as a batch
         # words -> indexes
         indexes_batch = [indexesFromSentence(self.voc, sentence)]
-
+        
         # Create lengths tensor
         lengths = torch.tensor([len(indexes) for indexes in indexes_batch])
 
@@ -34,11 +36,21 @@ class Generative():
         input_batch = input_batch.to(self.device)
         lengths = lengths.to("cpu")
 
-        # Decoder sentence with searcher
-        tokens, scores = self.searcher(input_batch, lengths, max_length)
+        # Decode sentence with Greedy Searcher
+        #tokens, scores = self.greedy(input_batch, lengths, max_length)
 
         # Indexes -> words
-        decoded_words = [self.voc.index2word[token.item()] for token in tokens]
+        #decoded_words = [self.voc.index2word[token.item()] for token in tokens]
+
+        # Decode sentence with Beam Search 
+        beamTokens = self.beamSearcher(input_batch, lengths, max_length)
+
+        # indexes to words
+        decoded_words = [self.voc.index2word[token.item()] for token in beamTokens]
+
+        # Remove start of sentence, end of sentence, and padding tokens
+        decoded_words[:] = [x for x in decoded_words if not (x == "SOS" or x == "EOS" or x == "PAD")]
+
         return decoded_words
 
     def run(self):

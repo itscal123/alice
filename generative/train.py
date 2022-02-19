@@ -593,13 +593,8 @@ if __name__ == "__main__":
     encoder.eval()
     decoder.eval()
 
-    # Initialize search 
-    #searcher = GreedySearchDecoder(encoder, decoder)
-    searcher = BeamSearchDecoder(encoder, decoder)
-
     # Save the encoder, decoder, and search method
     print("Saving model components")
     torch.save(encoder, "generative\models\encoder.pt")
     torch.save(decoder, "generative\models\decoder.pt")
-    torch.save(searcher, "generative\models\searcher.pt")
     print("Done")

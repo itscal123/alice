@@ -42,8 +42,9 @@ class BertAlice:
                     1.5) https://www.sbert.net/docs/training/overview.html for architecture and training
                     2) https://github.com/UKPLab/sentence-transformers/blob/master/examples/training/other/training_multi-task.py
                         for multitask training
-                    3) https://www.sbert.net/examples/applications/semantic-search/README.html for retrieving responses
-                        based on semantic similarity/search
+                    3) https://www.sbert.net/examples/applications/semantic-search/README.html
+                        https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/semantic-search/semantic_search.py
+                        for retrieving responses based on semantic similarity/search
                     4) https://www.analyticsvidhya.com/blog/2020/07/transfer-learning-for-nlp-fine-tuning-bert-for-text-classification/#:~:text=It%20is%20designed%20to%20pre,wide%20range%20of%20NLP%20tasks.%E2%80%9D
                         https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb
                         https://huggingface.co/docs/transformers/training
@@ -73,10 +74,6 @@ class BertAlice:
         # https://github.com/UKPLab/sentence-transformers/blob/master/examples/training/other/training_multi-task.py
         pass
 
-    def _encode(self, query: str):
-        """ Input is a query string which we will encode through our model. The output is our query embedding. """
-        return self.model.encode(query, show_progress_bar=False)
-
     def get_response(self, query: str):
         """ Run a semantic search against our query, then output the following line from our corpus of movie dialogue.
             params: query = The user query """
@@ -89,49 +86,16 @@ class BertAlice:
         # return the next line of dialogue after the top result
         return self._get_next_line(top_result)
 
-    def get_topk_similar(self, k, query):
-        """ Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
-            put this into the class for funsiez... idk if we will actually need it
-            params: query = string
-                    k = int of how many similar results to search for
-            output: Union of tensors with the top k most similar results """
+    # HELPER FUCNTIONS
 
-        top_k = min(k, len(self.embeddings['corpus_embeddings']))
-        query_embedding = self._encode(query)
-        # We use cosine-similarity and torch.topk to find the highest 5 scores
-        cos_scores = util.cos_sim(query_embedding, self.embeddings['corpus_embeddings'])[0]
-        top_results = torch.topk(cos_scores, k=top_k)
-
-        return top_results
-
-    def get_sarcastic_responses(self, query: str, k: int):
-        """ Output sarcastic responses for a query
-            params: query = string
-                    k = int of how many results to output """
-        top_results = self.get_topk_similar(k, query)
-        ranking = 1
-        for score, idx in zip(top_results[0], top_results[1]):
-            print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
-
-            line_id = movie_lines[:, 0][idx]
-
-            next_line = get_next_line(line_id, convo_mappings, movie_lines)
-            print("   Corresponding response: " + next_line + '\n')
-
-            if next_line != "[N/A]":
-                print("   Sarcastic responses:\n")
-                top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
-                for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
-                    print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
-
-            ranking += 1
-            print()
+    def _encode(self, query: str):
+        """ Input is a query string which we will encode through our model. The output is our query embedding. """
+        return self.model.encode(query, show_progress_bar=False)
 
     def _get_next_line(self, line):
         """ Outputs the following line of dialogue given a line from the movie lines corpus """
-        # TODO
-        # not sure about this line-- what does idx do?
-        # i see down below that you've zipped the top 2 results, but still unsure of what that does as well
+        score = top_results[0][0]
+        idx = top_results[1][0]
         line_id = self.embeddings['movie_lines'][:, 0][idx]
 
         next_line = "[N/A]"
@@ -165,6 +129,45 @@ class BertAlice:
         else:
             print("Embeddings don't exist! Please run bert.py")
         return embeddings
+
+    # EXTRA FUNCTIONS
+
+    def get_topk_similar(self, k, query):
+        """ Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
+            put this into the class for funsiez... idk if we will actually need it
+            params: query = string
+                    k = int of how many similar results to search for
+            output: Union of tensors with the top k most similar results """
+
+        top_k = min(k, len(self.embeddings['corpus_embeddings']))
+        query_embedding = self._encode(query)
+        # We use cosine-similarity and torch.topk to find the highest k scores
+        cos_scores = util.cos_sim(query_embedding, self.embeddings['corpus_embeddings'])[0]
+        return torch.topk(cos_scores, k=top_k)
+
+    def get_sarcastic_responses(self, query: str, k: int):
+        """ Prints sarcastic responses for a query
+            params: query = string
+                    k = int of how many results to output """
+        top_results = self.get_topk_similar(k, query)
+        ranking = 1
+        for score, idx in zip(top_results[0], top_results[1]):
+            print(str(ranking) + ') ' + movie_lines[:, 1][idx] + " (Score: {:.4f})".format(score) + '\n')
+
+            line_id = movie_lines[:, 0][idx]
+
+            next_line = get_next_line(line_id, convo_mappings, movie_lines)
+            print("   Corresponding response: " + next_line + '\n')
+
+            if next_line != "[N/A]":
+                print("   Sarcastic responses:\n")
+                top_sarcastic_results = get_topk_similar(5, next_line, sarc_embeddings)
+                for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
+                    print("\t- " + sarc_lines[i].strip() + " (Score: {:.4f})".format(s))
+
+            ranking += 1
+            print()
+
 
 if __name__ == '__main__':
 

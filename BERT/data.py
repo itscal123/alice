@@ -47,8 +47,8 @@ def convert_sarc_data_to_dataframe(paths: [str]):
         df = pd.read_csv(path, index_col='id')
         #df = pd.read_csv(file, index_col='id')
         df = df[df['class'] == 'sarc'] # only use sarcastic text
-        print('Num sentences in {}: {:,}\n'.format(path, df.shape[0]))
-        print('Samples:\n {}\n'.format(df.sample(3)))
+        # print('Num sentences in {}: {:,}\n'.format(path, df.shape[0]))
+        # print('Samples:\n {}\n'.format(df.sample(3)))
         dfs.append(df)
     return dfs
 

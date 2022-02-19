@@ -18,7 +18,9 @@ from io import open
 import itertools
 import math
 import pickle
-from data import Voc, batch2TrainData, Data
+import operator
+from data import Voc, batch2TrainData, Data, normalizeString, indexesFromSentence
+from queue import PriorityQueue
 
 MIN_COUNT = 3
 MAX_LENGTH = 10
@@ -145,7 +147,6 @@ class Decoder(nn.Module):
         # Define layers
         self.embedding = embedding
         self.embedding_dropout = nn.Dropout(dropout)
-        # TODO: Additional hidden GRU layers???
         self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=(0 if n_layers==1 else dropout))
         self.concat = nn.Linear(hidden_size * 2, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
@@ -233,7 +234,7 @@ def train(input_variable, lengths, target_variable, mask, max_target_len,
     decoder_hidden = encoder_hidden[:decoder.n_layers]
 
     # Check if we are using Teacher Forcing on this iteration
-    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+    use_teacher_forcing = True if random.random() < 0.7 else False
 
     # Forward pass through decoder one time step at a time 
     if use_teacher_forcing:
@@ -257,7 +258,7 @@ def train(input_variable, lengths, target_variable, mask, max_target_len,
             decoder_input = torch.LongTensor([[topi[i][0] for i in range(batch_size)]])
             decoder_input = decoder_input.to(device)
 
-            # Calvulate/Accumulate loss
+            # Calculate/Accumulate loss
             mask_loss, nTotal = maskNLL(decoder_output, target_variable[t], mask[t])
             loss += mask_loss
             print_losses.append(mask_loss.item() * nTotal)
@@ -317,25 +318,8 @@ def trainIters(model_name, voc, pairs, encoder, decoder, encoder_optimizer, deco
                     "Average loss: {:.4f}".format(iteration, iteration / n_iteration * 100, print_loss_avg))
             print_loss = 0
 
-        """
-        # Save checkpoint
-        if (iteration % save_every==0):
-            directory = os.path.join(save_dir, model_name, corpus_name, "{}-{}_{}".format(encoder_n_layers, decoder_n_layers, hidden_size))
-            if not os.path.exists(directory):
-                os.makedires(directory)
-            torch.save({
-                "iteration": iteration,
-                "en": encoder.state_dict(),
-                "de": decoder.state_dict(),
-                "en_opt": encoder_optimizer.state_dict(),
-                "de_opt": decoder_optimizer.state_dict(),
-                "loss": loss,
-                "voc_dict": voc.__dict__,
-                "embedding": embedding.state_dict()
-            }, os.path.join(directory, "{}_{}.tar".format(iteration, "checkpoint")))
-        """
 
-# greedy decoding implementation; replace with beam search later
+# Greedy decoding implementation
 class GreedySearchDecoder(nn.Module):
     def __init__(self, encoder, decoder):
         super(GreedySearchDecoder, self).__init__()
@@ -356,7 +340,7 @@ class GreedySearchDecoder(nn.Module):
         all_tokens = torch.zeros([0], device=device, dtype=torch.long)
         all_scores = torch.zeros([0], device=device)
 
-        # Iteratively decode one wor token at a time
+        # Iteratively decode one word token at a time
         for _ in range(max_length):
             # Forward pass through decoder
             decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
@@ -375,13 +359,14 @@ class GreedySearchDecoder(nn.Module):
         return all_tokens, all_scores
 
 
-# Beam search implementation; todo
+# Beam search implementation
 class BeamSearchDecoder(nn.Module):
-    def __init__(self, encoder, decoder, k=2):
+    def __init__(self, encoder, decoder, k=10):
         super(BeamSearchDecoder, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.k = k
+
 
     def forward(self, input_seq, input_length, max_length):
         # Forward pass through encoder
@@ -390,26 +375,139 @@ class BeamSearchDecoder(nn.Module):
         # Prepare encoder's final hidden layer to be first hidden layer to the decoder
         decoder_hidden = encoder_hidden[:self.decoder.n_layers]
 
-        # Initialize decoder with SOS token
-        decoder_input = torch.ones(1, 1, device=device, dtype=torch.long) * SOS_token
+        # Initialize target tensor with shape [batch_size, max_length]
+        target_tensor = torch.empty(decoder_hidden.size(dim=1), max_length)
 
-class BeamNode():
-    def __init__(self, hidden_state, prev, logProb, length, WORDID):
+        # Perform beam search
+        sequence = self.beam_decode(target_tensor, decoder_hidden, encoder_outputs)
+        
+        return torch.tensor([i for i in sequence[0][0]])
+
+
+    def beam_decode(self, target_tensor, decoder_hiddens, encoder_outputs):
+        """
+        Perform the decoding using the beam search algorithm
+        params:
+            target_tensor: shape of output tensor. Shape of (batch_size, max_length)
+            decoder_hiddens: decoder's hidden state. Shape of (1, batch_size, hidden_size)
+            encoder_outputs: encoder's outputs. Shape of (input_seq, batch_size, hidden_size)
+        returns:
+            list of lists containing the tensors of the word tokens of the outputs
+        """
+        beam_width = self.k     # beam width
+        topk = 1                # number of sentences to output
+        decoded_batch = []      # list containing the list of word tokens
+
+        # decoding goes sentence by sentence
+        for i in range(target_tensor.size(0)):
+            if isinstance(decoder_hiddens, tuple): raise
+            decoder_hidden = decoder_hiddens[:, i, :].unsqueeze(1)
+            encoder_output = encoder_outputs[:, i, :].unsqueeze(1)
+
+            # Start with SOS token
+            decoder_input = torch.LongTensor([[SOS_token]], device=device)
+            
+            # Number of sentence to generate
+            endnodes = []
+            number_required = min((topk + 1), topk - len(endnodes))
+
+            # Starting node: Hidden State, previous Node, Word ID, log probability, length 
+            node = BeamSearchNode(decoder_hidden, None, decoder_input, 0, 1)
+            nodes = PriorityQueue()
+
+            # Start Queue
+            nodes.put((-node.eval(), node)) 
+            qsize = 1
+
+            # Start Beam Search
+            while True:
+                # Quit if Decoding takes too long
+                if qsize > 2000:
+                    break
+
+                # Get best node
+                score, n = nodes.get()
+                decoder_input = n.wordId
+                decoder_hidden = n.hidden_state
+
+                if n.wordId.item() == EOS_token and n.prevNode != None:
+                    endnodes.append((score, n))
+                    # Break if maximum number of senetences required
+                    if len(endnodes) >= number_required:
+                        break
+                    else:
+                        continue
+
+                # Decode for one step
+                decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden, encoder_output)
+
+                # Beam Search of top k
+                log_prob, indexes = torch.topk(decoder_output, beam_width)
+                nextnodes = []
+
+                for new_k in range(beam_width):
+                    decoded_t = indexes[0][new_k].view(1,-1)
+                    log_p = log_prob[0][new_k].item()
+
+                    node = BeamSearchNode(decoder_hidden, n, decoded_t, n.logProb + log_p, n.length + 1)
+                    score = -node.eval()
+                    nextnodes.append((score, node))
+
+                # Insert into queue
+                for i in range(len(nextnodes)):
+                    score, nn = nextnodes[i]
+                    nodes.put((score, nn))
+                    # Increase queue size
+                qsize += len(nextnodes) - 1
+
+            # Choose n best paths, backtrack nodes
+            if len(endnodes) == 0:
+                endnodes = [nodes.get() for _ in range(topk)]
+
+            utterances = []
+
+            for score, n in sorted(endnodes, key=operator.itemgetter(0)):
+                utterance = []
+                utterance.append(n.wordId)
+                # backtrack
+                while n.prevNode != None:
+                    n = n.prevNode
+                    utterance.append(n.wordId)
+
+                utterance = utterance[::-1]
+                utterances.append(utterance)
+
+            decoded_batch.append(utterances)
+        
+        return decoded_batch
+
+
+class BeamSearchNode():
+    def __init__(self, hidden_state, prevNode, wordId, logProb, length):
         self.hidden_state = hidden_state
-        self.prev = prev
+        self.prevNode = prevNode
+        self.wordId = wordId
         self.logProb = logProb
         self.length = length
+
+
+    def eval(self, alpha=1.0):
+        """
+        Calculates the score of a node
+        """
+        reward = 0
+        return self.logProb / float(self.length - 1 + 1e-6) + alpha * reward
 
 
 if __name__ == "__main__":
     # Configure models
     model_name = "generative_model"
-    attn_model = "dot"
-    hidden_size = 800
+    attn_model = "general"
+    hidden_size = 1000
     encoder_n_layers = 3
     decoder_n_layers = 3
-    dropout = 0.1
-    batch_size = 64
+    dropout = 0.2
+    batch_size = 128
 
     # Load Data components
     data = pickle.load(open("generative\data.p", "rb"))
@@ -418,9 +516,6 @@ if __name__ == "__main__":
     # Set checkpoint to load; None if training for first time
     loadFileName = None
     checkpoint_iter = 100
-    #loadFilename = os.path.join(save_dir, model_name, corpus_name,
-    #                            '{}-{}_{}'.format(encoder_n_layers, decoder_n_layers, hidden_size),
-    #                            '{}_checkpoint.tar'.format(checkpoint_iter))
 
     # Load model if a loadFilename is provided
     if loadFileName:
@@ -457,8 +552,8 @@ if __name__ == "__main__":
     clip = 50.0
     teacher_forcing_ratio = 1.0
     learning_rate = 0.0001
-    decoder_learning_ratio = 5.0
-    n_iteration = 5000
+    decoder_learning_ratio = 2.0
+    n_iteration = 10000
     print_every = 1
     save_every = 500
 
@@ -468,8 +563,8 @@ if __name__ == "__main__":
 
     # Initialize optimizers
     print("Building optimizers...")
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
+    encoder_optimizer = optim.NAdam(encoder.parameters(), lr=learning_rate)
+    decoder_optimizer = optim.NAdam(decoder.parameters(), lr=learning_rate * decoder_learning_ratio)
 
     if loadFileName:
         encoder_optimizer.load_state_dict(encoder_optimizer_sd)
@@ -499,8 +594,8 @@ if __name__ == "__main__":
     decoder.eval()
 
     # Initialize search 
-    searcher = GreedySearchDecoder(encoder, decoder)
-    #searcher = BeamSearchDecoder(encoder, decoder)
+    #searcher = GreedySearchDecoder(encoder, decoder)
+    searcher = BeamSearchDecoder(encoder, decoder)
 
     # Save the encoder, decoder, and search method
     print("Saving model components")

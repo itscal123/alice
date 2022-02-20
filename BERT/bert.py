@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer, util, LoggingHandler
 import numpy as np
 from ast import literal_eval
 import pickle
-from data import convert_sarc_data_to_dataframe
+from data_processor import convert_sarc_data_to_dataframe
 
 # OPTIONAL: if you want to have more information on what's happening, activate the logger as follows
 import logging
@@ -15,26 +15,6 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     handlers=[LoggingHandler()],
                     level=logging.INFO)
-
-
-# OVERALL TODO
-# These are just notes for my reference -- read at risk of confusion:
-# I want to fine-tune the model on text classification using the sarcasm dataset
-# There are many ways to go about this:
-# 1) Using the huggingface doc for how to fine-tune pretrained BERT
-# 2) Use sbert doc for tuning for specific downstream task or even multitask train
-# 3) Use template how-to code
-# Then, save the model, and use as the base model for our sentence transformer (class defined below)
-# This class will be the one used for the interface, it will have functions for embedding the query and retrieving
-# a response
-
-# for train module:
-# from transformers import BertTokenizer, BertModel
-# from tqdm import tqdm
-# from torch.utils.data import TensorDataset, DataLoader, RandomSampler
-# from torch.optim import AdamW
-# from torch import nn
-# import matplotlib.pyplot as plt
 
 # STATIC FUNCTIONS
 
@@ -86,6 +66,7 @@ class BertAlice:
             calculated the embeddings from this model. """
         self.model = SentenceTransformer(model_name, device=device)
         self.embeddings = load_embeddings()
+        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device(device)
 
     def __repr__(self):
         # TODO

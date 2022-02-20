@@ -3,37 +3,7 @@ import torch
 import os
 from transformers import BertTokenizer
 
-# load dataset into a dataframe
-# file = '/Users/bianca/Documents/SCHOOL/CS175/alice/data/cornell movie-dialogs corpus/movie_lines.txt'
-#
-# df = pd.read_csv(file, index_col=False,
-#                  sep=r'\+{3}\$\+{3}',
-#                  engine='python',
-#                  header=None,
-#                  skipinitialspace=True,
-#                  encoding='unicode_escape',
-#                  na_filter=False,
-#                  names=['lineID', 'charID', 'movieID', 'charName', 'text'])
-#
-# print('Num sentences: {:,}\n'.format(df.shape[0]))
-# print(df.sample(10))
-#
-# lines = df.text.values
-# print('First 5 lines: {}'.format(lines[:5]))
-#
-# print('Loading BERT tokenizer...')
-# tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-#
-# #comparing sentences
-# print('Original: ', lines[9])
-# print('Tokenized: ', tokenizer.tokenize(lines[9]))
-# print('Token IDs: ', tokenizer.convert_tokens_to_ids(tokenizer.tokenize(lines[9])))
-
 ROOT_DIR = os.path.dirname(os.path.abspath(os.curdir))
-
-gen_sarc_file = 'data/sarcasm_v2/GEN-sarc-notsarc.csv'
-hyperbole_file = 'data/sarcasm_v2/HYP-sarc-notsarc.csv'
-rq_file = 'data/sarcasm_v2/RQ-sarc-notsarc.csv'
 
 
 def convert_sarc_data_to_dataframe(paths: [str]):
@@ -43,17 +13,46 @@ def convert_sarc_data_to_dataframe(paths: [str]):
         # this line didn't work for me. since we have the data in the github project dir,
         # i think we can just reference it 'locally' -- without the root path prefix.
         # yes, we can, but for some reason it doesn't recognize the reference for me, so i'm uncommenting for now
-        #file = os.path.join(ROOT_DIR, path)
+        # file = os.path.join(ROOT_DIR, path)
         df = pd.read_csv(path, index_col='id')
-        #df = pd.read_csv(file, index_col='id')
-        df = df[df['class'] == 'sarc'] # only use sarcastic text
+        # df = pd.read_csv(file, index_col='id')
+        df = df[df['class'] == 'sarc']  # only use sarcastic text
         # print('Num sentences in {}: {:,}\n'.format(path, df.shape[0]))
         # print('Samples:\n {}\n'.format(df.sample(3)))
         dfs.append(df)
     return dfs
 
 
-# gen_df, hyp_df, rq_df = convert_sarc_data_to_dataframe([gen_sarc_file, hyperbole_file, rq_file])
+def process_sarc_data_for_training():
+    """ This function is pretty much the same as the one above, but we keep the labels
+    :return: dataframes with text and labels from sarcasm corpus
+    """
+    # load dataset into a dataframe
+    sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
+                  'data/sarcasm_v2/HYP-sarc-notsarc.csv',
+                  'data/sarcasm_v2/RQ-sarc-notsarc.csv']
+    dfs = []
+
+    for path in sarc_files:
+        path = os.path.join(ROOT_DIR, path)
+        df = pd.read_csv(path, index_col='id')
+
+        # print('Num sentences: {:,}\n'.format(df.shape[0]))
+        # print(df.sample(10))
+
+        # lines = df.text.values
+        # print('First 5 lines: {}'.format(lines[:5]))
+
+        dfs.append(df)
+
+    # print('Loading BERT tokenizer...')
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    #
+    # # comparing sentences
+    # print('Original: ', lines[9])
+    # print('Tokenized: ', tokenizer.tokenize(lines[9]))
+    # print('Token IDs: ', tokenizer.convert_tokens_to_ids(tokenizer.tokenize(lines[9])))
+    return dfs
 
 
 ### from https://github.com/Nielspace/BERT/blob/master/BERT%20Text%20Classification%20fine-tuning.ipynb
@@ -94,12 +93,6 @@ class DATALoader:
             'mask': torch.tensor(mask, dtype=torch.long),
             'token_type_ids': torch.tensor(token_type_ids, dtype=torch.long),
         }
-### END
 
-# some text has len > ~670, we'll truncate those
-# loaded_data = DATALoader(lines, 150)
-# # look at 10th input
-# sample = loaded_data[9]
-#
-# print("Token IDs:", sample["ids"])
-# print("Segment IDs", sample["token_type_ids"]) # token_type_ids = segment_ids
+if __name__ == "__main__":
+    process_sarc_data_for_training()

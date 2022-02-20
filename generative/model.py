@@ -75,6 +75,21 @@ class Generative():
                 print("Sorry I've never heard the word {} before.".format(e.args[0]))
         print("ALICE: See you next time!")
 
+
+    def response(self, input_sentence):
+        try:
+            # Normalize sentence
+            input_sentence = normalizeString(input_sentence)
+
+            # Evaluate sentence
+            output_words = self.evaluate(input_sentence)
+
+
+            return " ".join(output_words)
+        
+        except KeyError as e:
+            print("Sorry I've never heard the word {} before.".format(e.args[0]))
+
+
 if __name__ == "__main__":
     model = Generative()
-    model.run()

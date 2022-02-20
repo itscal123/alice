@@ -104,21 +104,25 @@ class BertAlice:
         """ Input is a query string which we will encode through our model. The output is our query embedding. """
         return self.model.encode(query, show_progress_bar=False)
 
-    def _get_next_line(self, line):
-        """ Outputs the following line of dialogue given a line from the movie lines corpus
-            :parameter line is a tuple of Tensors of size 1, ('values', 'indices')
+    def _get_next_line(self, line_id):
+        """ Outputs the following line of dialogue given a line id (e.g. 'L0000') 
+            from the movie lines corpus.
+            :parameter line_id is the line id of the preceding line -- the one most similar to
+            the user's query.
             :return a string with the next line """
-        # from the line: (values, indices), get the index of the top response
-        idx = int(line[1][0])
-        # @ ethan pls elaborate here ty
-        line_id = self.embeddings['movie_lines'][:, 0][idx]
 
-        next_line = "[N/A]"
+        # return [N/A] if there is no following line.
+        next_line = "[N/A]" 
+        # filter out all rows that do not contain line_id (there should only be 1 row containing line_id)
         line_filter = self.embeddings['convo_mappings'].map(lambda u: line_id in u)
         filtered_df = self.embeddings['convo_mappings'][line_filter]
+        # convo is a pandas df with 1 entry and NO columns names. the entry is a list of line_ids.
+        # e.g. [['L000', 'L001', 'L002']]
         convo = filtered_df.iloc[0]
+        # if the given line_id isn't the last line in a conversation, get the next line's line_id
+        # and get the corresponding line from self.embeddings['movie_lines'] using np.where
         if convo.index(line_id) != len(convo) - 1:
-            next_line = convo[convo.index(line_id) + 1]  # L000
+            next_line = convo[convo.index(line_id) + 1]  # e.g. 'L001'
             next_line = self.embeddings['movie_lines'][:, 1][np.where(self.embeddings['movie_lines'][:, 0] == next_line)][0]
         return next_line
 
@@ -126,7 +130,7 @@ class BertAlice:
 
     def get_topk_similar(self, k, query, corpus_embedding='movie_embeddings'):
         """ Find the closest 5 sentences of the corpus for each query sentence based on cosine similarity
-            put this into the class for funsiez... idk if we will actually need it
+            put this into the class for funzies... idk if we will actually need it
             :param query string
             :param int of how many similar results to search for
             :param corpus_embedding which corpus we want to compare embeddings against
@@ -155,6 +159,8 @@ class BertAlice:
             next_line = self._get_next_line(line_id)
             print("   Corresponding response: " + next_line + '\n')
 
+            # if there exists a response to the most similar line (to the user's query),
+            # then find text from the sarcasm corpus that is similar to that response.
             if next_line != "[N/A]":
                 print("   Sarcastic responses:\n")
                 top_sarcastic_results = self.get_topk_similar(5, next_line, 'sarc_embeddings')

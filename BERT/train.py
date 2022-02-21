@@ -60,8 +60,8 @@ val_text, test_text, val_labels, test_labels = train_test_split(temp_text, temp_
 
 # load the model
 # we need to specify that we want the hidden states to be outputted
-config = AutoConfig.from_pretrained('distilbert-base-uncased', output_hidden_states=True)
-bert = AutoModel.from_pretrained('distilbert-base-uncased', config=config)
+#config = AutoConfig.from_pretrained('distilbert-base-uncased', output_hidden_states=True)
+bert = AutoModel.from_pretrained('bert-base-uncased')
 
 # load the tokenizer
 tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')

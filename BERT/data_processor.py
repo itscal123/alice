@@ -2,6 +2,8 @@ import pandas as pd
 import torch
 import os
 from transformers import BertTokenizer
+from nltk.tokenize import RegexpTokenizer
+import numpy as np
 
 ROOT_DIR = os.path.dirname(os.path.abspath(os.curdir))
 
@@ -94,5 +96,41 @@ class DATALoader:
             'token_type_ids': torch.tensor(token_type_ids, dtype=torch.long),
         }
 
+
+
+def getDataStatistics(df):
+    """ Expects a df with 1 column of strings (sentences)"""
+    tokenizer = RegexpTokenizer(r'\w+')
+    df['tokenized_sents'] = df.apply(tokenizer.tokenize)
+    df['sents_length'] = df['tokenized_sents'].apply(lambda row: len(row))
+    # print(df['tokenized_sents'].values)
+    # print(df['sents_length'].values)
+    x = np.array(df['sents_length'].values)
+    print("Total number of words:", x.sum(),
+          "\nMax/Min doc length:   ", x.max(), '/', x.min(),
+          "\nAverage words per doc:", np.average(x), '\n')
+
 if __name__ == "__main__":
-    process_sarc_data_for_training()
+    movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
+    movie_dialogues_df = pd.read_csv(movie_dialogues_file, index_col=False,
+                                        sep=r'\+{3}\$\+{3}',
+                                        engine='python',
+                                        header=None,
+                                        skipinitialspace=True,
+                                        encoding='unicode_escape',
+                                        na_filter=False,
+                                        names=['lineID', 'charID', 'movieID', 'charName', 'text'])
+
+    # strip all whitespace
+    movie_dialogues_df.text = movie_dialogues_df.text.apply(lambda x: x.strip())   
+
+
+    sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
+                  'data/sarcasm_v2/HYP-sarc-notsarc.csv',
+                  'data/sarcasm_v2/RQ-sarc-notsarc.csv']
+    sarc_df = pd.concat(convert_sarc_data_to_dataframe(sarc_files), axis=0)
+
+    getDataStatistics(movie_dialogues_df.text)
+    getDataStatistics(sarc_df.text)
+
+    # process_sarc_data_for_training()

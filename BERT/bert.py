@@ -91,12 +91,23 @@ class BertAlice:
         query_embedding = self._encode(query)
         # compare query embedding to movie embeddings via cosine similarity
         cos_scores = util.cos_sim(query_embedding, self.embeddings['movie_embeddings'])[0]
-        # get most similar sentence
+        # get 5 most similar sentences
         # topk returns a named tuple of Tensors: ('values', 'indices')
-        # in our case, the tuple will consist of two Tensors of size 1
-        top_result = torch.topk(cos_scores, 1)
-        # return the next line of dialogue after the top result
-        return self._get_next_line(top_result)
+        # in our case, the tuple will consist of two Tensors of size 5
+        potential_responses = []
+        top_results = torch.topk(cos_scores, 5)
+        # for each similar sentence, add the next line and it's score (cosine-similarity to the user's query) to the list of
+        # potential responses if available (not [N/A])
+        for score, idx in zip(top_results[0], top_results[1]):
+            next_line = self._get_next_line(self.embeddings['movie_lines'][:, 0][idx])
+            if next_line[1] != "[N/A]":
+                cos_score = util.cos_sim(query_embedding, self.embeddings['movie_embeddings'][next_line[0]])[0]
+                potential_responses.append((cos_score,next_line[1]))
+
+        # return the response with the highest score
+        return max(potential_responses, key=lambda a:a[0])
+
+        
 
     # HELPER FUNCTIONS
 
@@ -109,10 +120,12 @@ class BertAlice:
             from the movie lines corpus.
             :parameter line_id is the line id of the preceding line -- the one most similar to
             the user's query.
-            :return a string with the next line """
+            :return a tuple containing the string with the next line and its corresponding index in movie_embeddings
+            e.g., (12345, "why hello there") """
 
         # return [N/A] if there is no following line.
         next_line = "[N/A]" 
+        next_line_idx = -1
         # filter out all rows that do not contain line_id (there should only be 1 row containing line_id)
         line_filter = self.embeddings['convo_mappings'].map(lambda u: line_id in u)
         filtered_df = self.embeddings['convo_mappings'][line_filter]
@@ -123,8 +136,9 @@ class BertAlice:
         # and get the corresponding line from self.embeddings['movie_lines'] using np.where
         if convo.index(line_id) != len(convo) - 1:
             next_line = convo[convo.index(line_id) + 1]  # e.g. 'L001'
+            next_line_idx = np.where(self.embeddings['movie_lines'][:, 0] == next_line)[0][0]
             next_line = self.embeddings['movie_lines'][:, 1][np.where(self.embeddings['movie_lines'][:, 0] == next_line)][0]
-        return next_line
+        return (next_line_idx, next_line)
 
     # EXTRA FUNCTIONS
 
@@ -271,5 +285,6 @@ if __name__ == '__main__':
             print('Calculating response...')
             print("\n\n======================\n\n")
             print("Query:", query)
-            print("\nTop 5 most similar sentences in corpus:")
-            bert.get_sarcastic_responses(query, 5)
+            print("Response:", bert.get_response(query))
+            # print("\nTop 5 most similar sentences in corpus:")
+            # bert.get_sarcastic_responses(query, 5)

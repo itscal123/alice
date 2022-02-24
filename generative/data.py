@@ -2,12 +2,34 @@ import os
 import unicodedata
 import codecs
 import re
+import csv
+import random
+import torch
+import itertools
+import pickle
 
 MIN_COUNT = 3
 MAX_LENGTH = 10
 PAD_token = 0
 SOS_token = 1
 EOS_token = 2
+
+
+class Data:
+    """
+    Data object that stores all the necessary components needed to train/evaluate the
+    encoder-decoder model.
+    """
+    def __init__(self, voc, pairs, save_dir, corpus_name):
+        self.voc = voc
+        self.pairs = pairs
+        self.save_dir = save_dir
+        self.corpus_name = corpus_name
+
+    
+    def loadData(self):
+        return self.voc, self.pairs, self.save_dir, self.corpus_name
+
 
 class Voc:
     """
@@ -25,7 +47,7 @@ class Voc:
     # Add all words in a sentence  to vocabulary
     def addSentence(self, sentence):
         for word in sentence.split(" "):
-            self.addword(word)
+            self.addWord(word)
 
     # Add word to the vocabulary
     def addWord(self, word):
@@ -118,7 +140,6 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
 def trimRareWords(voc, pairs, MIN_COUNT):
     # Trim words used under the MIN_COUNT from the voc
     voc.trim(MIN_COUNT)
-    
     # Filter out pairs with trimmed words
     keep_pairs = []
     for pair in pairs:
@@ -127,22 +148,22 @@ def trimRareWords(voc, pairs, MIN_COUNT):
         keep_input = True
         keep_output = True
         # Check input sentence
-        for word in input_sentence.split(" "):
+        for word in input_sentence.split(' '):
             if word not in voc.word2index:
                 keep_input = False
                 break
         # Check output sentence
-        for word in output_sentence.split(" "):
+        for word in output_sentence.split(' '):
             if word not in voc.word2index:
                 keep_output = False
                 break
-        
-        # Only keep pairs that don't contain trimmed word(s) in their input or output sentence
+
+        # Only keep pairs that do not contain trimmed word(s) in their input or output sentence
         if keep_input and keep_output:
             keep_pairs.append(pair)
 
-        print("Trimmed from {} pairs to {}, {:.4f} of total".format(len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
-        return keep_pairs
+    print("Trimmed from {} pairs to {}, {:.4f} of total".format(len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)))
+    return keep_pairs
 
 
 def printLines(file, n=10):
@@ -160,28 +181,53 @@ def printLines(file, n=10):
         print(line)
 
 
+# Splits each line of the file into a dictionary of fields
 def loadLines(fileName, fields):
-    """
-    Splits each line of the file into a dictionary fields
-    """
-    # TODO
-    return
+    lines = {}
+    with open(fileName, 'r', encoding='iso-8859-1') as f:
+        for line in f:
+            values = line.split(" +++$+++ ")
+            # Extract fields
+            lineObj = {}
+            for i, field in enumerate(fields):
+                lineObj[field] = values[i]
+            lines[lineObj['lineID']] = lineObj
+    return lines
 
 
+# Groups fields of lines from `loadLines` into conversations based on *movie_conversations.txt*
 def loadConversations(fileName, lines, fields):
-    """
-    Groups fields of lines from loadLines into conversations
-    """
-    # TODO
-    return
+    conversations = []
+    with open(fileName, 'r', encoding='iso-8859-1') as f:
+        for line in f:
+            values = line.split(" +++$+++ ")
+            # Extract fields
+            convObj = {}
+            for i, field in enumerate(fields):
+                convObj[field] = values[i]
+            # Convert string to list (convObj["utteranceIDs"] == "['L598485', 'L598486', ...]")
+            utterance_id_pattern = re.compile('L[0-9]+')
+            lineIds = utterance_id_pattern.findall(convObj["utteranceIDs"])
+            # Reassemble lines
+            convObj["lines"] = []
+            for lineId in lineIds:
+                convObj["lines"].append(lines[lineId])
+            conversations.append(convObj)
+    return conversations
 
 
+# Extracts pairs of sentences from conversations
 def extractSentencePairs(conversations):
-    """
-    Extracts pairs of sentences from conversations
-    """
-    # TODO
-    return
+    qa_pairs = []
+    for conversation in conversations:
+        # Iterate over all the lines of the conversation
+        for i in range(len(conversation["lines"]) - 1):  # We ignore the last line (no answer for it)
+            inputLine = conversation["lines"][i]["text"].strip()
+            targetLine = conversation["lines"][i+1]["text"].strip()
+            # Filter wrong samples (if one of the lists is empty)
+            if inputLine and targetLine:
+                qa_pairs.append([inputLine, targetLine])
+    return qa_pairs
 
 
 def indexesFromSentence(voc, sentence):
@@ -237,21 +283,42 @@ def batch2TrainData(voc, pair_batch):
 
 
 if __name__ == "__main__":
+    corpus_name = "cornell movie-dialogs corpus"
+    corpus = os.path.join("data", corpus_name)
+    #printLines(os.path.join(corpus, "movie_lines.txt"))
+
+    # Define path to new file
+    datafile = os.path.join(corpus, "formatted_movie_lines.txt")
+
+    delimiter = '\t'
+    # Unescape the delimiter
+    delimiter = str(codecs.decode(delimiter, "unicode_escape"))
+
+    # Initialize lines dict, conversations list, and field ids
+    lines = {}
+    conversations = []
+    MOVIE_LINES_FIELDS = ["lineID", "characterID", "movieID", "character", "text"]
+    MOVIE_CONVERSATIONS_FIELDS = ["character1ID", "character2ID", "movieID", "utteranceIDs"]
+    
     # Load and format data file
     print("Processing corpus...")
-    # TODO
+    lines = loadLines(os.path.join(corpus, "movie_lines.txt"), MOVIE_LINES_FIELDS)
     print("Corpus processed\n")
 
     print("Loading conversation...")
-    # TODO
+    conversations = loadConversations(os.path.join(corpus, "movie_conversations.txt"),
+                                  lines, MOVIE_CONVERSATIONS_FIELDS)
     print("Loading complete\n")
 
     print("Writing newly formatted data...")
-    # TODO
+    with open(datafile, 'w', encoding='utf-8') as outputfile:
+        writer = csv.writer(outputfile, delimiter=delimiter, lineterminator='\n')
+        for pair in extractSentencePairs(conversations):
+            writer.writerow(pair)
     print("File complete\n")
 
-    print("Sample lines from file")
-    # TODO
+    #print("Sample lines from file")
+    #printLines(datafile)
 
     # Load/Assemble voc and pairs
     save_dir = os.path.join("data", "save")
@@ -275,3 +342,9 @@ if __name__ == "__main__":
     print("target_variable:", target_variable)
     print("mask:", mask)
     print("max_target_len:", max_target_len)
+
+    print("Pickling/Saving Data...")
+    data = Data(voc, pairs, save_dir, corpus_name)
+    pickle.dump(data, open("generative\data.p", "wb"))
+    print("Done")
+

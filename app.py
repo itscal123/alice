@@ -77,7 +77,7 @@ if __name__ == "__main__":
         score, output = bertQuery(user_input)
         
         # generative's query if bi-encoder's is below threshold
-        if not torch.greater(score, torch.tensor(0.7)):
+        if not torch.greater(score, torch.tensor(0.6)):
             output = generativeQuery(user_input)
 
         st.session_state.past.append(user_input)

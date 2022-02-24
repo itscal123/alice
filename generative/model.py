@@ -88,7 +88,7 @@ class Generative():
             return " ".join(output_words)
         
         except KeyError as e:
-            print("Sorry I've never heard the word {} before.".format(e.args[0]))
+            return "Sorry I've never heard the word {} before.".format(e.args[0])
 
 
 if __name__ == "__main__":

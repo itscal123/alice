@@ -59,8 +59,6 @@ val_text, test_text, val_labels, test_labels = train_test_split(temp_text, temp_
 # we will now fine-tune the model using the train set and validation set, and make predictions for the test set
 
 # load the model
-# we need to specify that we want the hidden states to be outputted
-#config = AutoConfig.from_pretrained('distilbert-base-uncased', output_hidden_states=True)
 bert = AutoModel.from_pretrained('bert-base-uncased')
 
 # load the tokenizer
@@ -127,7 +125,8 @@ test_y = torch.tensor(test_labels.tolist())
 # now lets put our data into a dataloader, for simplicity when loading our data when training
 
 # define a batch size (recommended 16 or 32)
-batch_size = 16
+# cut in half for my cuda
+batch_size = 8
 
 # wrap tensors
 train_data = TensorDataset(train_seq, train_mask, train_y)
@@ -174,7 +173,7 @@ class BERT_Arch(nn.Module):
     # define the forward pass
     def forward(self, sent_id, mask):
         # pass the inputs to the model
-        _, cls_hs = self.bert(sent_id, attention_mask=mask)
+        _, cls_hs = self.bert(sent_id, attention_mask=mask, return_dict=False)
 
         x = self.fc1(cls_hs)
 
@@ -201,8 +200,6 @@ model = model.to(device)
 optimizer = AdamW(model.parameters(),
                   lr=1e-5)  # learning rate
 
-# now we'll balance out our weights in case of having uneven amounts of sarc - notsarc
-
 # compute the class weights
 class_weights = compute_class_weight('balanced', classes=np.unique(train_labels), y=train_labels)
 
@@ -220,7 +217,7 @@ weights = weights.to(device)
 cross_entropy = nn.NLLLoss(weight=weights)
 
 # number of training epochs
-epochs = 10
+epochs = 3
 
 
 # now that we've done our data preprocessing, data loading, defined our models with the optimizer, loss functions
@@ -385,6 +382,9 @@ path = 'saved_weights.pt'
 model.load_state_dict(torch.load(path))
 
 # once we've loaded the weights, we can use the newly fine-tuned model to make predictions on the test set
+
+# clear cache
+# torch.cuda.empty_cache()
 
 # get predictions for test data
 with torch.no_grad():

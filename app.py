@@ -1,4 +1,6 @@
 import sys
+
+from pyparsing import null_debug_action
 import streamlit as st
 import time
 import torch
@@ -14,11 +16,20 @@ from model import Generative
 from train import Encoder, Decoder, GreedySearchDecoder, GlobalAttn, BeamSearchDecoder
 from data import Voc, normalizeString, indexesFromSentence, Data
 
-# Load the information retrieval model
-bert = BertAlice()
-# Load the generative model
-generative = Generative()
 
+
+@st.cache(allow_output_mutation=True)
+def initialize_models():
+    """
+    This function will only be run the first time it's called.
+    I added "allow_output_mutation=True" because I think the generative model
+    is changing a bit upon each initialization -- which messes with the cache...
+    """
+    # # Load the information retrieval model
+    # bert = BertAlice()
+    # # Load the generative model
+    # generative = Generative()
+    return (BertAlice(), Generative())
 
 
 def get_text():
@@ -59,8 +70,13 @@ if __name__ == "__main__":
         page_title = "ALICE - Demo",
         page_icon = ":robot:"
     )
+    
+    bert, generative = initialize_models()
+
     # Title
     st.header("ALICE - Demo")
+
+    
 
     if "responses" not in st.session_state:
         st.session_state["responses"] = []

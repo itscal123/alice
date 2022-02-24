@@ -10,6 +10,5 @@
 .idea
 
 # Ignore Pickle
-embeddings.pkl
 BERT/__pycache__/data.cpython-39.pyc
 /BERT/test2.py

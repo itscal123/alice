@@ -86,22 +86,27 @@ class BertAlice:
     def get_response(self, query: str):
         """ Run a semantic search against our query, then output the following line from our corpus of movie dialogue.
             :parameter query The user query """
-        # TODO
+
         query_embedding = self._encode(query)
         # compare query embedding to movie embeddings via cosine similarity
         cos_scores = util.cos_sim(query_embedding, self.embeddings['movie_embeddings'])[0]
+
         # get 5 most similar sentences
         # topk returns a named tuple of Tensors: ('values', 'indices')
         # in our case, the tuple will consist of two Tensors of size 5
         potential_responses = []
         top_results = torch.topk(cos_scores, 5)
+
         # for each similar sentence, add the next line and it's score (cosine-similarity to the user's query) to the list of
         # potential responses if available (not [N/A])
         for score, idx in zip(top_results[0], top_results[1]):
             next_line = self._get_next_line(self.embeddings['movie_lines'][:, 0][idx])
             if next_line[1] != "[N/A]":
                 cos_score = util.cos_sim(query_embedding, self.embeddings['movie_embeddings'][next_line[0]])[0]
-                potential_responses.append((cos_score,next_line[1]))
+                potential_responses.append(((cos_score+score)/2,next_line[1]))
+                # print("\n\nsimilar sentence:", self.embeddings['movie_lines'][:,1][idx], "||", score)
+                # print("next_line:", next_line[1], "||", cos_score)
+                # print("weighted average:", (cos_score+score)/2)
 
         # these sarcastic responses are so bad.
         # sarcastic_responses = self.get_sarcastic_responses(max(potential_responses, key=lambda a:a[0])[1])

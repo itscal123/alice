@@ -1,3 +1,6 @@
+# Inspired by the PyTorch's Chatbot Tutorial by Matthew Inkawhich.
+# url: https://pytorch.org/tutorials/beginner/chatbot_tutorial.html 
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function

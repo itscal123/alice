@@ -1,12 +1,10 @@
 import sys
-
-#from pyparsing import null_debug_action
 import streamlit as st
 import time
 import torch
 from streamlit_chat import message
-sys.path.insert(1, "BERT\\")        # Add BERT folder to path
-sys.path.insert(1, "generative\\")  # Add generative folder to path
+sys.path.insert(1, "BERT/")        # Add BERT folder to path
+sys.path.insert(1, "generative/")  # Add generative folder to path
 
 # Information Retrieval model imports
 from bert import BertAlice

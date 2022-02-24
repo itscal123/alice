@@ -345,6 +345,6 @@ if __name__ == "__main__":
 
     print("Pickling/Saving Data...")
     data = Data(voc, pairs, save_dir, corpus_name)
-    pickle.dump(data, open("generative\data.p", "wb"))
+    pickle.dump(data, open(Path("generative/data.p"), "wb"))
     print("Done")
 

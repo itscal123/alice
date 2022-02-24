@@ -24,6 +24,7 @@ import pickle
 import operator
 from data import Voc, batch2TrainData, Data, normalizeString, indexesFromSentence
 from queue import PriorityQueue
+from pathlib import Path
 
 MIN_COUNT = 3
 MAX_LENGTH = 10
@@ -513,7 +514,7 @@ if __name__ == "__main__":
     batch_size = 128
 
     # Load Data components
-    data = pickle.load(open("generative\data.p", "rb"))
+    data = pickle.load(open(Path("generative/data.p"), "rb"))
     voc, pairs, save_dir, corpus_name = data.loadData()
 
     # Set checkpoint to load; None if training for first time
@@ -598,6 +599,6 @@ if __name__ == "__main__":
 
     # Save the encoder and decoder
     print("Saving model components")
-    torch.save(encoder, "generative\models\encoder.pt")
-    torch.save(decoder, "generative\models\decoder.pt")
+    torch.save(encoder, Path("generative/models/encoder.pt"))
+    torch.save(decoder, Path("generative/models/decoder.pt"))
     print("Done")

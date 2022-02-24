@@ -73,16 +73,15 @@ if __name__ == "__main__":
 
     # Book keeping of all utterances between the user and ALICE.
     if user_input:
-        # TODO: bi-encoder's query
+        # bi-encoder's query
         score, output = bertQuery(user_input)
-        # TODO: use bi-encoder ouput if score passes threshold
-        if torch.greater(score, torch.tensor(0.7)):
-            st.session_state.past.append(user_input)
-            st.session_state.responses.append(output)            
-        else:
+        
+        # generative's query if bi-encoder's is below threshold
+        if not torch.greater(score, torch.tensor(0.7)):
             output = generativeQuery(user_input)
-            st.session_state.past.append(user_input)
-            st.session_state.responses.append(output)       
+
+        st.session_state.past.append(user_input)
+        st.session_state.responses.append(output)       
 
 
     if st.session_state["responses"]:

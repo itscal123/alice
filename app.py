@@ -75,4 +75,3 @@ if __name__ == "__main__":
         for i in range(len(st.session_state["responses"])-1, -1, -1):
             message(st.session_state["responses"][i], key=str(i))
             message(st.session_state["past"][i], is_user=True, key=str(i) + "_user")
-    

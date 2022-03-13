@@ -4,6 +4,10 @@ ALICE: A Witty Chatbot
     + programmed by Isabel Flores, Calvin Lee, and Ethan Song
 =================================================================
 
+# Mention the dataset your team used, with the URL for each
+Datasets used:
+� AAA (URL0), Twitter data with labels A
+
 # Mention the external libraries your team used (libraries that are not default to python but
 # need to be downloaded for your code to run), with the URL for each
 Libraries used:

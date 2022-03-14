@@ -38,5 +38,10 @@ Publicly available codes used:
 # many lines of code is present in each and provide a brief description (for each) of what the
 # code does.
 Scripts/functions written by our team:
-• AAA.py Converts tweets into bag of words format
-• BBB.py Identifies the top K most important features in a tree-based classifier
+[IR Model]
+• BERT.py BERT/IR Model class file. Everything needed to initialize and operate ALICE IR Model.
+• data_processor.py data preprocessing functions + 1 data statistic function
+
+
+[Gen Model]
+• 

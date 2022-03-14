@@ -173,36 +173,6 @@ class BertAlice:
         for score, idx in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
             sarcastic_responses.append((score, self.embeddings['sarc_lines'][idx].strip()))
         return sarcastic_responses
-        
-
-    # def get_sarcastic_responses(self, query: str, k: int):
-    #     """ Prints sarcastic responses for a query
-    #         params: query = string
-    #                 k = int of how many results to output """
-    #     top_results = self.get_topk_similar(k, query)
-    #     ranking = 1
-    #     # top_results is a tuple of tensors: ('values': Tensor, 'indices': Tensor)
-    #     for score, idx in zip(top_results[0], top_results[1]):
-    #         line = self.embeddings['movie_lines'][:, 1][idx]
-    #         line_id = self.embeddings['movie_lines'][:, 0][idx]
-
-    #         print(str(ranking) + ') ' + line + " (Score: {:.4f})".format(score) + '\n')
-
-    #         next_line = self._get_next_line(line_id)
-    #         print("   Corresponding response: " + next_line + '\n')
-
-    #         # if there exists a response to the most similar line (to the user's query),
-    #         # then find text from the sarcasm corpus that is similar to that response.
-    #         if next_line != "[N/A]":
-    #             print("   Sarcastic responses:\n")
-    #             top_sarcastic_results = self.get_topk_similar(5, next_line, 'sarc_embeddings')
-    #             for s, i in zip(top_sarcastic_results[0], top_sarcastic_results[1]):
-    #                 print("\t- " + self.embeddings['sarc_lines'][i].strip() + " (Score: {:.4f})".format(s))
-    #         else:
-    #             print("    No sarcastic response found. Outputting last line instead:\n")
-    #             print(line + '\n')
-    #         ranking += 1
-    #         print()
 
 
 if __name__ == '__main__':

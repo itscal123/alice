@@ -3,8 +3,8 @@ import streamlit as st
 import time
 import torch
 from streamlit_chat import message
-sys.path.insert(1, "BERT/")        # Add BERT folder to path
-sys.path.insert(1, "generative/")  # Add generative folder to path
+sys.path.insert(1, "src/BERT/")        # Add BERT folder to path
+sys.path.insert(1, "src/generative/")  # Add generative folder to path
 
 # Information Retrieval model imports
 from bert import BertAlice
@@ -73,8 +73,6 @@ if __name__ == "__main__":
 
     # Title
     st.header("ALICE - Demo")
-
-    
 
     if "responses" not in st.session_state:
         st.session_state["responses"] = []

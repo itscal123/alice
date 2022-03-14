@@ -19,10 +19,10 @@ class Generative():
     the model response given user input.
     """
     def __init__(self):
-        self.encoder = torch.load(Path("generative/models/encoder.pt"))
-        self.decoder = torch.load(Path("generative/models/decoder.pt"))
+        self.encoder = torch.load(Path("src/generative/models/encoder.pt"))
+        self.decoder = torch.load(Path("src/generative/models/decoder.pt"))
         self.beamSearcher = BeamSearchDecoder(self.encoder, self.decoder, 10)
-        data = pickle.load(open(Path("generative/data.p"), "rb"))
+        data = pickle.load(open(Path("src/generative/data.p"), "rb"))
         voc, pairs, save_dir, corpus_name = data.loadData()
         self.voc = voc
         USE_CUDA = torch.cuda.is_available()

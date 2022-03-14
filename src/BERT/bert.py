@@ -21,11 +21,11 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 # if we ever wanted to load the embeddings into something else without instantiating the class, or loading the model
 def load_embeddings():
     """ Loads the embeddings, then returns a dictionary with entries as the different files """
-    pickled_embs_file = 'embeddings.pkl'
+    pickled_embs_file = 'src/embeddings.pkl'
     embeddings = dict()
     if os.path.exists(pickled_embs_file):
         # Load sentences & embeddings from disc
-        with open('embeddings.pkl', "rb") as fIn:
+        with open('src/embeddings.pkl', "rb") as fIn:
             stored_data = pickle.load(fIn)
             stored_movie_lines = stored_data['movie_lines']
             stored_sarc_lines = stored_data['sarc_lines']

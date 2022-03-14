@@ -30,9 +30,9 @@ def process_sarc_data_for_training():
     :return: dataframes with text and labels from sarcasm corpus
     """
     # load dataset into a dataframe
-    sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
-                  'data/sarcasm_v2/HYP-sarc-notsarc.csv',
-                  'data/sarcasm_v2/RQ-sarc-notsarc.csv']
+    sarc_files = ['./data/sarcasm_v2/GEN-sarc-notsarc.csv',
+                  './data/sarcasm_v2/HYP-sarc-notsarc.csv',
+                  './data/sarcasm_v2/RQ-sarc-notsarc.csv']
     dfs = []
 
     for path in sarc_files:
@@ -111,7 +111,7 @@ def getDataStatistics(df):
           "\nAverage words per doc:", np.average(x), '\n')
 
 if __name__ == "__main__":
-    movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
+    movie_dialogues_file = './data/cornell movie-dialogs corpus/movie_lines.txt'
     movie_dialogues_df = pd.read_csv(movie_dialogues_file, index_col=False,
                                         sep=r'\+{3}\$\+{3}',
                                         engine='python',
@@ -125,9 +125,9 @@ if __name__ == "__main__":
     movie_dialogues_df.text = movie_dialogues_df.text.apply(lambda x: x.strip())   
 
 
-    sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
-                  'data/sarcasm_v2/HYP-sarc-notsarc.csv',
-                  'data/sarcasm_v2/RQ-sarc-notsarc.csv']
+    sarc_files = ['./data/sarcasm_v2/GEN-sarc-notsarc.csv',
+                  './data/sarcasm_v2/HYP-sarc-notsarc.csv',
+                  './data/sarcasm_v2/RQ-sarc-notsarc.csv']
     sarc_df = pd.concat(convert_sarc_data_to_dataframe(sarc_files), axis=0)
 
     getDataStatistics(movie_dialogues_df.text)

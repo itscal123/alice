@@ -95,20 +95,21 @@ class GlobalAttn(nn.Module):
             self.v = nn.Parameter(torch.FloatTensor(hidden_size))
 
 
+    # Dot prodcut of decoder output and encoder output
     def dot_score(self, hidden, encoder_output):
         return torch.sum(hidden * encoder_output, dim=2)
 
-
+    # Dot product between decoder output and weighted encoder output
     def general_score(self, hidden, encoder_output):
         energy = self.attn(encoder_output)
         return torch.sum(hidden * energy, dim=2)
 
-
+    # Dot product between weighted concatenation of decoder and encoder outputs and learned tensor v
     def concat_score(self, hidden, encoder_output):
         energy = self.attn(torch.cat((hidden.expand(encoder_output.size(0), -1, -1), encoder_output), 2)).tanh()
         return torch.sum(self.v * energy, dim=2)
 
-
+    # Forward pass of the attention layer. Outputs the softmax probabilities of the final output
     def forward(self, hidden, encoder_outputs):
         # Calculate Attention weights based off method
         if self.method == "general":
@@ -192,6 +193,13 @@ def maskNLL(inp, target, mask):
     elements in the input tensor. Instead, calculate loss by decoder's output tensor, target tensor, and a binary mask 
     tensor that describes the padded target tensor. Negative log likelihood of the elements that are are masked
     (i.e., marked 1 in the mask tensor).
+    params:
+        inp: Input tensor used to calculate Negative Log Likelihood against target tensor (i.e., decoder_outputs)
+        target: True target tensor used to calculate Negative Log Likelihood
+        mask: Boolean tensor that indicates the correct padding of the target tensor
+    returns:
+        loss: total negative lok likelihood loss
+        nTotal.item(): Total padding in mask tensor
     """
     nTotal = mask.sum()
     crossEntropy = -torch.log(torch.gather(inp, 1, target.view(-1, 1)).squeeze(1))
@@ -487,6 +495,9 @@ class BeamSearchDecoder(nn.Module):
 
 
 class BeamSearchNode():
+    """
+    Node used to generate the hypothesis space during beam_decode. 
+    """
     def __init__(self, hidden_state, prevNode, wordId, logProb, length):
         self.hidden_state = hidden_state
         self.prevNode = prevNode
@@ -494,7 +505,7 @@ class BeamSearchNode():
         self.logProb = logProb
         self.length = length
 
-
+    
     def eval(self, alpha=1.0):
         """
         Calculates the score of a node

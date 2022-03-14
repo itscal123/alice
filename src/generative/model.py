@@ -1,3 +1,6 @@
+# Inspired by the PyTorch's Chatbot Tutorial by Matthew Inkawhich.
+# url: https://pytorch.org/tutorials/beginner/chatbot_tutorial.html 
+
 from __future__ import unicode_literals
 
 import torch
@@ -10,6 +13,11 @@ from pathlib import Path
 
 
 class Generative():
+    """
+    Wrapper class so the app.py file can load the fully trained encoder-decoder
+    model. Provides two methods evaluate and response which are used to generate
+    the model response given user input.
+    """
     def __init__(self):
         self.encoder = torch.load(Path("generative/models/encoder.pt"))
         self.decoder = torch.load(Path("generative/models/decoder.pt"))
@@ -22,6 +30,16 @@ class Generative():
 
 
     def evaluate(self, sentence, max_length=8):
+        """
+        Converts the input sentence to readable tensor which is passed
+        to the model. Uses Beam Search to output the final output tensor.
+        For formatting purposes, any SOS, EOS, and PAD tokens are removed. 
+        params:
+            sentence (str): the raw string that the user types in
+            max_length(int): The maximum length of the final output
+        returns:
+            decoded_words (list): List of tokens (strings) of the final output
+        """ 
         # Format input sentence as a batch
         # words -> indexes
         indexes_batch = [indexesFromSentence(self.voc, sentence)]
@@ -74,7 +92,3 @@ class Generative():
         
         except KeyError as e:
             return "Sorry I've never heard the word {} before.".format(e.args[0])
-
-
-if __name__ == "__main__":
-    model = Generative()

@@ -1,3 +1,6 @@
+# Inspired by the PyTorch's Chatbot Tutorial by Matthew Inkawhich.
+# url: https://pytorch.org/tutorials/beginner/chatbot_tutorial.html 
+
 import os
 import unicodedata
 import codecs
@@ -7,6 +10,7 @@ import random
 import torch
 import itertools
 import pickle
+from pathlib import Path
 
 MIN_COUNT = 3
 MAX_LENGTH = 10
@@ -33,7 +37,7 @@ class Data:
 
 class Voc:
     """
-    Voc class which maps the words to indices, a rerse mapping of indices to words, count of each word, and a total word count.
+    Voc object which maps the words to indices, a rerse mapping of indices to words, count of each word, and a total word count.
     Contains methods for adding words to vocabulary, adding all words in a sentence, and trimming infrequently seen words.
     """
     def __init__(self, name):
@@ -259,7 +263,7 @@ def inputVar(l, voc):
     return padVar, lengths        
 
 
-# Returns padded target sequence tenosr, padding mask, and max target length
+# Returns padded target sequence tensor, padding mask, and max target length
 def outputVar(l, voc):
     indexes_batch = [indexesFromSentence(voc, sentence) for sentence in l]
     max_target_len = max([len(indexes) for indexes in indexes_batch])
@@ -284,7 +288,7 @@ def batch2TrainData(voc, pair_batch):
 
 if __name__ == "__main__":
     corpus_name = "cornell movie-dialogs corpus"
-    corpus = os.path.join("data", corpus_name)
+    corpus = os.path.join("./data", corpus_name)
     #printLines(os.path.join(corpus, "movie_lines.txt"))
 
     # Define path to new file
@@ -321,7 +325,7 @@ if __name__ == "__main__":
     #printLines(datafile)
 
     # Load/Assemble voc and pairs
-    save_dir = os.path.join("data", "save")
+    save_dir = os.path.join("./data", "save")
     voc, pairs = loadPrepareData(corpus, corpus_name, datafile, save_dir)
     # Print some pairs to validate
     print("\nPairs:")
@@ -347,4 +351,3 @@ if __name__ == "__main__":
     data = Data(voc, pairs, save_dir, corpus_name)
     pickle.dump(data, open(Path("generative/data.p"), "wb"))
     print("Done")
-

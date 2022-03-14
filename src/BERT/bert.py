@@ -189,7 +189,7 @@ if __name__ == '__main__':
         # based on code from: http://mccormickml.com/2019/07/22/BERT-fine-tuning/#21-download--extract
         ROOT_DIR = os.path.dirname(os.path.abspath(os.curdir))
 
-        movie_dialogues_file = 'data/cornell movie-dialogs corpus/movie_lines.txt'
+        movie_dialogues_file = './data/cornell movie-dialogs corpus/movie_lines.txt'
         movie_dialogues_df = pd.read_csv(movie_dialogues_file, index_col=False,
                                          sep=r'\+{3}\$\+{3}',
                                          engine='python',
@@ -203,7 +203,7 @@ if __name__ == '__main__':
         movie_dialogues_df.lineID = movie_dialogues_df.lineID.apply(lambda x: x.strip())
         movie_dialogues_df.text = movie_dialogues_df.text.apply(lambda x: x.strip())
 
-        movie_conversations_file = 'data/cornell movie-dialogs corpus/movie_conversations.txt'
+        movie_conversations_file = './data/cornell movie-dialogs corpus/movie_conversations.txt'
         movie_conversations_df = pd.read_csv(movie_conversations_file, index_col=False,
                                              sep=r'\+{3}\$\+{3}',
                                              engine='python',
@@ -220,9 +220,9 @@ if __name__ == '__main__':
         movie_conversations_df.lineIDs = movie_conversations_df.lineIDs.apply(literal_eval)
         convo_mappings = movie_conversations_df.lineIDs
 
-        sarc_files = ['data/sarcasm_v2/GEN-sarc-notsarc.csv',
-                      'data/sarcasm_v2/HYP-sarc-notsarc.csv',
-                      'data/sarcasm_v2/RQ-sarc-notsarc.csv']
+        sarc_files = ['./data/sarcasm_v2/GEN-sarc-notsarc.csv',
+                      './data/sarcasm_v2/HYP-sarc-notsarc.csv',
+                      './data/sarcasm_v2/RQ-sarc-notsarc.csv']
         sarc_df = pd.concat(convert_sarc_data_to_dataframe(sarc_files), axis=0)
         sarc_lines = np.array(sarc_df.text.values)
 

@@ -32,17 +32,23 @@ Libraries used:
 # the number of lines your team modified or added.
 Publicly available codes used:
 • YYY (URL2)
-• ZZZ (URL3). Modified/added approximately 50 lines of code
+• PyTorch Chatbot Tutorial (https://pytorch.org/tutorials/beginner/chatbot_tutorial.html#preparations). 
+    - Modified/added approximately 300 lines of code
 
 
 # List the code(s) written entirely by your team. Please roughly mention how
 # many lines of code is present in each and provide a brief description (for each) of what the
 # code does.
 Scripts/functions written by our team:
+[User Interface]
+• app.py: Loads and runs the fully trained IR and Generative model.
+
 [IR Model]
 • BERT.py BERT/IR Model class file. Everything needed to initialize and operate ALICE IR Model.
 • data_processor.py data preprocessing functions + 1 data statistic function
 
 
 [Gen Model]
-• 
+• data.py: Creates the data object and necessary data preprocessing used during training and inference.
+• train.py: Creates and trains the encoder-decoder model with Attention
+• model.py: Generative Model wrapper class. Loads fully trained model and generates responses. 

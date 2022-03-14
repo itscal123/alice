@@ -3,6 +3,11 @@
 ALICE: A Witty Chatbot
     + programmed by Isabel Flores, Calvin Lee, and Ethan Song
 =================================================================
+# Directions for running demonstration (app.py)
+    1. Install all libraries using the command "pip install -r requirements.txt"
+    2. Run the command "streamlit run app.py. The program will open in a new browser tab.
+    3. Wait for the models to initialize.
+    4. Once all loaded, type away!
 
 # Mention the dataset your team used, with the URL for each
 Datasets used:
@@ -11,7 +16,6 @@ Datasets used:
 
 # Mention the external libraries your team used (libraries that are not default to python but
 # need to be downloaded for your code to run), with the URL for each
-# Alternatively, simply run "pip install -r requirements.txt" to install all packages.
 Libraries used:
 • matplotlib (https://matplotlib.org/)
 • nltk (https://www.nltk.org/)
@@ -46,7 +50,6 @@ Scripts/functions written by our team:
 [IR Model]
 • BERT.py BERT/IR Model class file. Everything needed to initialize and operate ALICE IR Model.
 • data_processor.py data preprocessing functions + 1 data statistic function
-
 
 [Gen Model]
 • data.py: Creates the data object and necessary data preprocessing used during training and inference.

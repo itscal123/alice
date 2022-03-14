@@ -11,6 +11,7 @@ Datasets used:
 
 # Mention the external libraries your team used (libraries that are not default to python but
 # need to be downloaded for your code to run), with the URL for each
+# Alternatively, simply run "pip install -r requirements.txt" to install all packages.
 Libraries used:
 • matplotlib (https://matplotlib.org/)
 • nltk (https://www.nltk.org/)

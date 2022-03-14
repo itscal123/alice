@@ -94,11 +94,11 @@ if __name__ == "__main__":
         if not torch.greater(score, torch.tensor(0.6)):
             output = generativeQuery(user_input)
 
-        st.session_state.past.append(user_input)
-        st.session_state.responses.append(output)       
+        st.session_state.past.insert(0, user_input)
+        st.session_state.responses.insert(0, output)       
 
 
     if st.session_state["responses"]:
         for i in range(len(st.session_state["responses"])-1, -1, -1):
-            message(st.session_state["responses"][i], key=str(i))
             message(st.session_state["past"][i], is_user=True, key=str(i) + "_user")
+            message(st.session_state["responses"][i], key=str(i))

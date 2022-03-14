@@ -6,12 +6,24 @@ ALICE: A Witty Chatbot
 
 # Mention the dataset your team used, with the URL for each
 Datasets used:
-� AAA (URL0), Twitter data with labels A
+• Sarcasm Corpus v2 (https://nlds.soe.ucsc.edu/sarcasm2)
+• Cornell Movie Dialogs Corpus (https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html)
 
 # Mention the external libraries your team used (libraries that are not default to python but
 # need to be downloaded for your code to run), with the URL for each
 Libraries used:
-• XXX (URL1)
+• matplotlib (https://matplotlib.org/)
+• nltk (https://www.nltk.org/)
+• numpy (https://numpy.org/)
+• pandas (https://pandas.pydata.org/)
+• pyparsing (https://pypi.org/project/pyparsing/)
+• scikit_learn (https://scikit-learn.org/stable/)
+• sentence_transformers (https://www.sbert.net/)
+• streamlit (https://streamlit.io/)
+• streamlit_chat (https://pypi.org/project/streamlit-chat/)
+• torch (https://pytorch.org/)
+• tqdm (https://tqdm.github.io/)
+• transformers (https://huggingface.co/docs/transformers/index)
 
 
 # List the publicly available code(s) you used in your project. Please provide the URL for the

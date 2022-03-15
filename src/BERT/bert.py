@@ -1,3 +1,9 @@
+# module for BERTAlice
+# used by app.py for IR model, comes with member functions for retrieving responses
+# running this script will compute and store embeddings that the model retrieves from
+# functions "get_response" and "get_topk_similar" include modified code from:
+# https://www.sbert.net/examples/applications/semantic-search/README.html
+# https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/semantic-search/semantic_search.py
 import torch
 import os
 import pandas as pd
@@ -47,17 +53,10 @@ class BertAlice:
     """ Hugging face SentenceTransformer model to generate sentence embeddings and output a response to a query
         calculated by the argmax of the dot product with pre-computed embeddings. Additionally, our model is fine-tuned
         for Sentence Classification on sarcastic versus non-sarcastic sentences.
-        References: 1) https://aajanki.github.io/fi-sentence-embeddings-eval/models.html for basic architecture
-                    1.5) https://www.sbert.net/docs/training/overview.html for architecture and training
-                    2) https://github.com/UKPLab/sentence-transformers/blob/master/examples/training/other/training_multi-task.py
-                        for multitask training
-                    3) https://www.sbert.net/examples/applications/semantic-search/README.html
+        References: https://www.sbert.net/examples/applications/semantic-search/README.html
                         https://github.com/UKPLab/sentence-transformers/blob/master/examples/applications/semantic-search/semantic_search.py
                         for retrieving responses based on semantic similarity/search
-                    4) https://www.analyticsvidhya.com/blog/2020/07/transfer-learning-for-nlp-fine-tuning-bert-for-text-classification/#:~:text=It%20is%20designed%20to%20pre,wide%20range%20of%20NLP%20tasks.%E2%80%9D
-                        https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb
-                        https://huggingface.co/docs/transformers/training
-                        for fine-tuning """
+    """
 
     def __init__(self, model_name='multi-qa-distilbert-dot-v1', device='cpu'):
         """ Loads the correct model.
@@ -66,10 +65,6 @@ class BertAlice:
         self.model = SentenceTransformer(model_name, device=device)
         self.embeddings = load_embeddings()
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device(device)
-
-    def __repr__(self):
-        # TODO
-        pass
 
     def train(self, data, max_seq_length):
         """ Training function for our model. We will be using this to fine-tune the base model for our downstream task.

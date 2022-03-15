@@ -35,7 +35,12 @@ Libraries used:
 # code and mention if you modified the code or not. If you modified the code, please mention
 # the number of lines your team modified or added.
 Publicly available codes used:
-• YYY (URL2)
+• SBERT Semantic Search Example (https://www.sbert.net/examples/applications/semantic-search/README.html)
+    - Modified/added ~5 lines of code
+• Fine-tuning BERT for sentence classification-- not used in final chatbot, but added to show attempt
+    (# https://www.analyticsvidhya.com/blog/2020/07/transfer-learning-for-nlp-fine-tuning-bert-for-text-classification/
+    #:~:text=It%20is%20designed%20to%20pre,wide%20range%20of%20NLP%20tasks.%E2%80%9D)
+    - Modified/added approximately 200 lines of code
 • PyTorch Chatbot Tutorial (https://pytorch.org/tutorials/beginner/chatbot_tutorial.html#preparations). 
     - Modified/added approximately 300 lines of code
 
@@ -45,13 +50,14 @@ Publicly available codes used:
 # code does.
 Scripts/functions written by our team:
 [User Interface]
-• app.py: Loads and runs the fully trained IR and Generative model.
+• app.py [100]: Loads and runs the fully trained IR and Generative model.
 
 [IR Model]
-• BERT.py BERT/IR Model class file. Everything needed to initialize and operate ALICE IR Model.
-• data_processor.py data preprocessing functions + 1 data statistic function
+• BERT.py [275] BERT/IR Model class file. Everything needed to initialize and operate ALICE IR Model. Including
+    computing embeddings.
+• data_processor.py [140] data preprocessing functions + 1 data statistic function
 
 [Gen Model]
-• data.py: Creates the data object and necessary data preprocessing used during training and inference.
-• train.py: Creates and trains the encoder-decoder model with Attention
-• model.py: Generative Model wrapper class. Loads fully trained model and generates responses. 
+• data.py [350]: Creates the data object and necessary data preprocessing used during training and inference.
+• train.py [600]: Creates and trains the encoder-decoder model with Attention
+• model.py [100]: Generative Model wrapper class. Loads fully trained model and generates responses.
